@@ -3,7 +3,10 @@ import { ForbiddenError } from "../../shared/_core/errors.js";
 import axios, { type AxiosInstance } from "axios";
 import { parse as parseCookieHeader } from "cookie";
 import type { Request } from "express";
-import { SignJWT, jwtVerify } from "jose";
+type JoseModule = typeof import("jose");
+let joseModulePromise: Promise<JoseModule> | undefined;
+const getJoseModule = (): Promise<JoseModule> =>
+  (joseModulePromise ??= import("jose"));
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
 import { ENV } from "./env";
@@ -163,6 +166,7 @@ class SDKServer {
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
     const secretKey = this.getSessionSecret();
 
+    const { SignJWT } = await getJoseModule();
     return new SignJWT({
       openId: payload.openId,
       appId: payload.appId,
@@ -183,6 +187,7 @@ class SDKServer {
 
     try {
       const secretKey = this.getSessionSecret();
+      const { jwtVerify } = await getJoseModule();
       const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"],
       });
