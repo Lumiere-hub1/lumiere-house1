@@ -141,7 +141,8 @@ export function registerOAuthRoutes(app: Express) {
     const rawBody = String((req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body ?? {}));
     const verification = verifyTikTokWebhookSignature(rawBody, req.header("TikTok-Signature") ?? undefined, ENV.tiktok.clientSecret);
     if (!verification.ok) {
-      console.error(JSON.stringify({ event: "webhook_rejected", provider: "tiktok", requestId: res.getHeader("X-Request-Id"), reason: verification.reason }));
+      const reason = "reason" in verification ? verification.reason : undefined;
+      console.error(JSON.stringify({ event: "webhook_rejected", provider: "tiktok", requestId: res.getHeader("X-Request-Id"), reason }));
       res.status(401).json({ error: "Invalid webhook signature." });
       return;
     }
