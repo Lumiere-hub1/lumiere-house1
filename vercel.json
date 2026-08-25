@@ -2,6 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "express",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm run build:vercel",
-  "outputDirectory": "web-build"
+  "buildCommand": "rm -rf public .vercel-web-build && pnpm exec expo export --platform web --output-dir .vercel-web-build && mkdir -p public && cp -a .vercel-web-build/. public/"
 }
