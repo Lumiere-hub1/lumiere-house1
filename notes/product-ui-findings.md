@@ -1,0 +1,7 @@
+# Product UI verification findings
+
+The mobile portrait preview at 390x844 renders both Today and the new Results tab without runtime errors. Today retains the premium calm shell, real workspace-backed counts, truthful empty recommendations, and guarded connector status. Results is now a first-class tab and shows target, forecast, assumptions, actual results, evidence counts, manual actual-event recording, event history, and learning. With no current goal, the screen correctly shows `Not set`; with no forecast evidence, it correctly shows `Not available`; no revenue or performance values are fabricated.
+
+Desktop verification at 1280x720 confirms Results is now a first-class tab and its target/forecast/actual lens, event counts, and truthful empty states render without overflow. Growth still presents goal creation and actual-data signal through persisted APIs. Content Studio still presents the outcome-first brief and existing production flow. The seven-tab shell remains legible, although labels compress naturally at the bottom on narrow mobile widths.
+
+After adding the Today daily-plan section and evidence-backed at-risk logic, the 390x844 mobile preview still renders Today and Results without overflow or runtime errors. Results remains legible with the seven-tab shell; Today’s new section is data-dependent and therefore stays out of the first viewport when the workspace has no active goals, clients, approvals, or drafts, preserving the calm empty-state hierarchy.

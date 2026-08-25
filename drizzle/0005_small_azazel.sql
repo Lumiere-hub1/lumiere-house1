@@ -1,0 +1,2 @@
+ALTER TABLE `background_jobs` ADD `idempotencyKey` varchar(255);--> statement-breakpoint
+ALTER TABLE `background_jobs` ADD CONSTRAINT `background_jobs_idempotency_idx` UNIQUE(`workspaceId`,`kind`,`idempotencyKey`);
