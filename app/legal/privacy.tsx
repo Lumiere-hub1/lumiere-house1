@@ -1,62 +1,57 @@
-import { Text, View } from "react-native";
+import { Linking, ScrollView, Text } from "react-native";
 import { ScreenShell, SectionLabel, Surface, brand } from "@/components/lumiere-ui";
 
 export default function PrivacyPolicyScreen() {
-  return (
-    <ScreenShell title="Privacy Policy" eyebrow="Lumière House" subtitle="Last updated: 2026">
-      <View style={{ gap: 16 }}>
-        <Surface>
-          <Text style={{ color: brand.ink, fontSize: 15, lineHeight: 22 }}>
-            Lumière House ("Lumière", "we", "us") provides revenue-recovery tools for beauty and
-            small businesses. This policy explains what information we collect, how we use it,
-            and the choices you have.
-          </Text>
-        </Surface>
+  return <ScreenShell title="Privacy Policy" eyebrow="Lumière House" subtitle="Last updated: 2026">
+    <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 40 }}>
+      <Surface><Text style={{ color: brand.ink, fontSize: 15, lineHeight: 22 }}>
+        Lumière House ("Lumière", "we", "us") provides revenue-recovery software for beauty and
+        wellness businesses. This policy explains what information we collect, how we use it, and
+        the choices you have.
+      </Text></Surface>
 
-        <SectionLabel>Information we collect</SectionLabel>
-        <Surface>
-          <Text style={{ color: brand.muted, fontSize: 14, lineHeight: 21 }}>
-            • Account information you provide directly: name, email, and password (stored as a
-            salted, hashed value, never in plain text).{"\n\n"}
-            • Business and workspace data you enter: clients, goals, campaigns, content, and
-            related records.{"\n\n"}
-            • If you connect a third-party platform (such as TikTok), we receive only the account
-            information and permissions you explicitly authorize during that platform's login
-            flow. We never access more than what you approve, and a connector is never treated as
-            connected until authorization actually succeeds.{"\n\n"}
-            • Basic technical data such as request logs, used only for security, rate-limiting,
-            and diagnosing errors.
-          </Text>
-        </Surface>
+      <SectionLabel>What we collect</SectionLabel>
+      <Surface><Text style={{ color: brand.ink, fontSize: 14, lineHeight: 21 }}>
+        Account information you provide (name, email, password); business information you enter
+        (business name, goals, clients you add for follow-up); and, if you choose to connect a
+        social platform such as TikTok, the basic profile information that platform shares with us
+        through its official login process (such as your display name and avatar), solely to
+        confirm which account is connected.
+      </Text></Surface>
 
-        <SectionLabel>How we use information</SectionLabel>
-        <Surface>
-          <Text style={{ color: brand.muted, fontSize: 14, lineHeight: 21 }}>
-            We use your information to operate your workspace, generate the recommendations and
-            content you request, secure your account, and comply with legal obligations. We do not
-            sell your personal information. Data obtained through a connected third-party platform
-            (for example, TikTok) is used only to provide the specific feature you authorized it
-            for, and is not used for unrelated advertising or shared with unrelated third parties.
-          </Text>
-        </Surface>
+      <SectionLabel>How we use it</SectionLabel>
+      <Surface><Text style={{ color: brand.ink, fontSize: 14, lineHeight: 21 }}>
+        We use this information to operate your account, show you your own business data inside
+        Lumière, and, only where you have connected a platform and explicitly approved an action,
+        to help you schedule or review content for that platform. We do not sell your data, and we
+        do not use TikTok data for advertising or share it with third parties for their own
+        purposes.
+      </Text></Surface>
 
-        <SectionLabel>Data retention and deletion</SectionLabel>
-        <Surface>
-          <Text style={{ color: brand.muted, fontSize: 14, lineHeight: 21 }}>
-            You may request deletion of your account and associated data at any time. See our Data
-            Deletion page for instructions. We retain data only as long as needed to provide the
-            service or as required by law.
-          </Text>
-        </Surface>
+      <SectionLabel>Connected platforms (e.g. TikTok)</SectionLabel>
+      <Surface><Text style={{ color: brand.ink, fontSize: 14, lineHeight: 21 }}>
+        When you connect a platform, Lumière only requests the minimum access needed for the
+        features you use, through that platform's official authorization screen. You can review
+        exactly what was requested at the time of connecting, and you can disconnect at any time
+        from Settings. Disconnecting revokes Lumière's access on our side; you can also manage or
+        revoke access directly from the platform's own account settings.
+      </Text></Surface>
 
-        <SectionLabel>Contact</SectionLabel>
-        <Surface>
-          <Text style={{ color: brand.muted, fontSize: 14, lineHeight: 21 }}>
-            Questions about this policy or your data can be sent to{" "}
-            <Text style={{ fontWeight: "700", color: brand.ink }}>roselureb@gmail.com</Text>.
-          </Text>
-        </Surface>
-      </View>
-    </ScreenShell>
-  );
+      <SectionLabel>Data deletion</SectionLabel>
+      <Surface><Text style={{ color: brand.ink, fontSize: 14, lineHeight: 21 }}>
+        You can request deletion of your account and associated data at any time. See our{" "}
+        <Text style={{ color: brand.ink, fontWeight: "700" }} onPress={() => Linking.openURL("/legal/data-deletion")}>
+          Data Deletion
+        </Text>{" "}page for how.
+      </Text></Surface>
+
+      <SectionLabel>Contact</SectionLabel>
+      <Surface><Text style={{ color: brand.ink, fontSize: 14, lineHeight: 21 }}>
+        Questions about this policy or your data can be sent to the contact address listed on our{" "}
+        <Text style={{ color: brand.ink, fontWeight: "700" }} onPress={() => Linking.openURL("/legal/support")}>
+          Support
+        </Text>{" "}page.
+      </Text></Surface>
+    </ScrollView>
+  </ScreenShell>;
 }

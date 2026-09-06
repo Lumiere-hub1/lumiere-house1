@@ -1,48 +1,28 @@
-import { Linking, Text, View } from "react-native";
-import { PrimaryButton, ScreenShell, SectionLabel, Surface, brand } from "@/components/lumiere-ui";
+import { Linking, ScrollView, Text } from "react-native";
+import { ScreenShell, SectionLabel, SecondaryButton, Surface, brand } from "@/components/lumiere-ui";
 
 export default function DataDeletionScreen() {
-  const emailSupport = () =>
-    Linking.openURL(
-      "mailto:roselureb@gmail.com?subject=Lumi%C3%A8re%20House%20-%20Data%20Deletion%20Request",
-    ).catch(() => undefined);
+  return <ScreenShell title="Data Deletion" eyebrow="Lumière House" subtitle="How to request deletion of your data">
+    <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 40 }}>
+      <Surface><Text style={{ color: brand.ink, fontSize: 14, lineHeight: 21 }}>
+        You can request full deletion of your Lumière House account and all associated data
+        (business information, clients, content drafts, and any connected-platform metadata we
+        stored) at any time.
+      </Text></Surface>
 
-  return (
-    <ScreenShell
-      title="Data Deletion"
-      eyebrow="Lumière House"
-      subtitle="How to request deletion of your account and data"
-    >
-      <View style={{ gap: 16 }}>
-        <Surface>
-          <Text style={{ color: brand.ink, fontSize: 15, lineHeight: 22 }}>
-            You can request full deletion of your Lumière House account and all associated data at
-            any time, including any data received from a connected third-party platform such as
-            TikTok.
-          </Text>
-        </Surface>
+      <SectionLabel>How to request deletion</SectionLabel>
+      <Surface><Text style={{ color: brand.ink, fontSize: 14, lineHeight: 21 }}>
+        Email us at the address on our Support page with the subject line "Delete my data" from the
+        email address on your account. We will confirm your identity and complete deletion within
+        30 days, and confirm by email once it is done.
+      </Text><SecondaryButton label="Open Support page" onPress={() => Linking.openURL("/legal/support")} icon="open-in-new" /></Surface>
 
-        <SectionLabel>How to request deletion</SectionLabel>
-        <Surface>
-          <Text style={{ color: brand.muted, fontSize: 14, lineHeight: 21 }}>
-            Email us at roselureb@gmail.com with the subject "Data Deletion Request" from the email
-            address associated with your account. We will confirm your identity and permanently
-            delete your account, workspace data, and any stored third-party authorization tokens
-            within 30 days.
-          </Text>
-          <PrimaryButton label="Email a deletion request" onPress={emailSupport} icon="mail" />
-        </Surface>
-
-        <SectionLabel>What gets deleted</SectionLabel>
-        <Surface>
-          <Text style={{ color: brand.muted, fontSize: 14, lineHeight: 21 }}>
-            Your account, workspace records, client and campaign data, generated content, and any
-            connected-platform tokens or permissions are permanently removed. Data we are legally
-            required to retain (for example, for fraud prevention or tax records) may be kept only
-            as long as legally required, and separately from your active account.
-          </Text>
-        </Surface>
-      </View>
-    </ScreenShell>
-  );
+      <SectionLabel>Disconnecting a platform (e.g. TikTok)</SectionLabel>
+      <Surface><Text style={{ color: brand.ink, fontSize: 14, lineHeight: 21 }}>
+        You can disconnect a connected platform yourself at any time from Settings → Connect,
+        which removes Lumière's stored access for that platform immediately. You can also revoke
+        access directly from that platform's own account settings.
+      </Text></Surface>
+    </ScrollView>
+  </ScreenShell>;
 }
