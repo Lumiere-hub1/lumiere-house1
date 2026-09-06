@@ -206,12 +206,27 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+const isNvidiaProvider = () =>
+  ENV.llmProvider.toLowerCase() === "nvidia" && Boolean(ENV.nvidiaApiKey);
+
+const resolveApiUrl = () => {
+  if (isNvidiaProvider()) {
+    return "https://integrate.api.nvidia.com/v1/chat/completions";
+  }
+
+  return ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
     ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
     : "https://forge.manus.im/v1/chat/completions";
+};
 
 const assertApiKey = () => {
+  if (isNvidiaProvider()) {
+    if (!ENV.nvidiaApiKey) {
+      throw new Error("NVIDIA_API_KEY is not configured");
+    }
+    return;
+  }
+
   if (!ENV.forgeApiKey) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
@@ -359,7 +374,9 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   };
 
   if (model) {
-    payload.model = model;
+    payload.model = isNvidiaProvider() ? ENV.nvidiaModel : model;
+  } else if (isNvidiaProvider()) {
+    payload.model = ENV.nvidiaModel;
   }
 
   if (tools && tools.length > 0) {
@@ -386,6 +403,12 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.reasoning = reasoning;
   }
 
+  if (isNvidiaProvider()) {
+    payload.chat_template_kwargs = {
+      enable_thinking: false,
+    };
+  }
+
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,
     response_format,
@@ -401,7 +424,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      authorization: `Bearer ${isNvidiaProvider() ? ENV.nvidiaApiKey : ENV.forgeApiKey}`,
     },
     body: JSON.stringify(payload),
   });
@@ -429,13 +452,14 @@ export type ModelsResponse = {
 export async function listLLMModels(): Promise<ModelsResponse> {
   assertApiKey();
 
-  const url =
-    ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+  const url = isNvidiaProvider()
+    ? "https://integrate.api.nvidia.com/v1/models"
+    : ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
       ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`
       : "https://forge.manus.im/v1/models";
 
   const response = await fetchWithBackoff(url, {
-    headers: { authorization: `Bearer ${ENV.forgeApiKey}` },
+    headers: { authorization: `Bearer ${isNvidiaProvider() ? ENV.nvidiaApiKey : ENV.forgeApiKey}` },
   });
 
   if (!response.ok) {

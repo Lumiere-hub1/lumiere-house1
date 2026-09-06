@@ -14,6 +14,9 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: trim(process.env.BUILT_IN_FORGE_API_URL),
   forgeApiKey: trim(process.env.BUILT_IN_FORGE_API_KEY),
+    nvidiaApiKey: trim(process.env.NVIDIA_API_KEY),
+  llmProvider: trim(process.env.LLM_PROVIDER),
+  nvidiaModel: trim(process.env.NVIDIA_MODEL) || "nvidia/nemotron-3.5-lightning-30b-a3b",
   tiktok: {
     clientKey: trim(process.env.TIKTOK_CLIENT_KEY),
     clientSecret: trim(process.env.TIKTOK_CLIENT_SECRET),
