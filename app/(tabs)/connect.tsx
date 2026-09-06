@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Linking, Platform, Text, View } from "react-native";
 import { EmptyState, LoadingState, Notice, ScreenShell, SectionLabel, SecondaryButton, StatusPill, Surface, brand } from "@/components/lumiere-ui";
 import { trpc } from "@/lib/trpc";
 import { useWorkspace } from "@/hooks/use-workspace";
@@ -18,7 +18,14 @@ export default function ConnectScreen() {
 
   const attempt = async (provider: string, isRetry = false) => {
     setAttempted(provider);
-    try { if (isRetry) await retry.mutateAsync({ workspaceId, provider }); else await connect.mutateAsync({ workspaceId, provider }); } catch { /* truthful error rendered below */ }
+    try {
+      const result = isRetry ? await retry.mutateAsync({ workspaceId, provider }) : await connect.mutateAsync({ workspaceId, provider });
+      const redirectUrl = (result as { redirectUrl?: string } | undefined)?.redirectUrl;
+      if (redirectUrl) {
+        if (Platform.OS === "web" && typeof window !== "undefined") window.location.href = redirectUrl;
+        else await Linking.openURL(redirectUrl);
+      }
+    } catch { /* truthful error rendered below */ }
   };
 
   return <ScreenShell title="Connect" eyebrow={workspace.name} subtitle="Authorize the systems that contain your real business signals. No scraping, no hidden access, no simulated connections.">
