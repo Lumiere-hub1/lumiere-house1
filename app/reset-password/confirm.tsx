@@ -25,7 +25,7 @@ export default function ResetConfirmScreen() {
       <View style={{ gap: 18, paddingTop: 28 }}>
         {!params.token ? <Notice tone="error">No reset token was provided. Request a new reset link.</Notice> : null}
         {mutation.error ? <Notice tone="error">{mutation.error.message}</Notice> : null}
-        <Field label="New password" secureTextEntry autoComplete="new-password" value={password} onChangeText={setPassword} placeholder="Create a strong password" hint="8+ characters, uppercase, lowercase, number, and special character." />
+        <Field label="New password" secureToggle autoComplete="new-password" value={password} onChangeText={setPassword} placeholder="Create a strong password" hint="8+ characters, uppercase, lowercase, number, and special character." />
         <PrimaryButton label="Update password" onPress={submit} loading={mutation.isPending} disabled={!params.token || !valid} icon="lock-outline" />
       </View>
     </KeyboardAvoidingView>

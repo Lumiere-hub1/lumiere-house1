@@ -35,7 +35,7 @@ export default function SignupScreen() {
         {signup.error ? <Notice tone="error">{signup.error.message}</Notice> : null}
         <Field label="Your name" autoCapitalize="words" autoComplete="name" value={name} onChangeText={setName} placeholder="Alex Morgan" />
         <Field label="Work email" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="you@business.com" />
-        <Field label="Password" secureTextEntry autoComplete="new-password" value={password} onChangeText={setPassword} placeholder="Create a strong password" hint={passwordHint(password)} />
+        <Field label="Password" secureToggle autoComplete="new-password" value={password} onChangeText={setPassword} placeholder="Create a strong password" hint={passwordHint(password)} />
         <Text style={{ color: brand.muted, fontSize: 12, lineHeight: 18 }}>Use 8+ characters with uppercase, lowercase, a number, and a special character. Your password is hashed before it is stored.</Text>
         <PrimaryButton label="Create account" onPress={submit} loading={signup.isPending} disabled={!valid} icon="arrow-forward" />
         <Link href={"/login" as any} asChild><Text style={{ color: brand.rose, textAlign: "center", fontWeight: "700", padding: 8 }}>Already have an account? Sign in</Text></Link>

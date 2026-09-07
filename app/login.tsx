@@ -28,7 +28,7 @@ export default function LoginScreen() {
       <View style={{ gap: 18, paddingTop: 28 }}>
         {login.error ? <Notice tone="error">{login.error.message}</Notice> : null}
         <Field label="Email" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="you@business.com" returnKeyType="next" />
-        <Field label="Password" secureTextEntry autoComplete="password" value={password} onChangeText={setPassword} placeholder="Your password" returnKeyType="done" onSubmitEditing={submit} />
+        <Field label="Password" secureToggle autoComplete="password" value={password} onChangeText={setPassword} placeholder="Your password" returnKeyType="done" onSubmitEditing={submit} />
         <PrimaryButton label="Sign in" onPress={submit} loading={login.isPending} disabled={!valid} icon="arrow-forward" />
         <Link href={"/reset-password" as any} asChild><Text style={{ color: brand.rose, textAlign: "center", fontWeight: "700", padding: 8 }}>Forgot your password?</Text></Link>
         <View style={{ height: 1, backgroundColor: brand.border, marginVertical: 6 }} />

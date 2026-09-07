@@ -1,5 +1,5 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -85,9 +85,11 @@ function Detail({ label, value }: { label: string; value: string }) {
   return <View style={styles.detail}><Text style={[styles.detailLabel, { color: colors.muted }]}>{label}</Text><Text style={[styles.detailValue, { color: colors.foreground }]}>{value}</Text></View>;
 }
 
-export function Field({ label, hint, error, ...props }: TextInputProps & { label: string; hint?: string; error?: string }) {
+export function Field({ label, hint, error, secureToggle, secureTextEntry, ...props }: TextInputProps & { label: string; hint?: string; error?: string; secureToggle?: boolean }) {
   const colors = useColors();
-  return <View style={styles.field}><Text style={[styles.fieldLabel, { color: colors.foreground }]}>{label}</Text>{hint ? <Text style={[styles.fieldHint, { color: colors.muted }]}>{hint}</Text> : null}<TextInput accessibilityLabel={label} placeholderTextColor={colors.muted} {...props} style={[styles.input, { color: colors.foreground, borderColor: error ? colors.error : colors.border, backgroundColor: colors.surface }]} />{error ? <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text> : null}</View>;
+  const [visible, setVisible] = useState(false);
+  const resolvedSecure = secureToggle ? !visible : secureTextEntry;
+  return <View style={styles.field}><Text style={[styles.fieldLabel, { color: colors.foreground }]}>{label}</Text>{hint ? <Text style={[styles.fieldHint, { color: colors.muted }]}>{hint}</Text> : null}<View style={{ justifyContent: "center" }}><TextInput accessibilityLabel={label} placeholderTextColor={colors.muted} secureTextEntry={resolvedSecure} {...props} style={[styles.input, secureToggle ? { paddingRight: 46 } : null, { color: colors.foreground, borderColor: error ? colors.error : colors.border, backgroundColor: colors.surface }]} />{secureToggle ? <Pressable accessibilityRole="button" accessibilityLabel={visible ? "Hide password" : "Show password"} onPress={() => setVisible((value) => !value)} style={{ position: "absolute", right: 14, height: 24, width: 24, alignItems: "center", justifyContent: "center" }}><MaterialIcons name={visible ? "visibility-off" : "visibility"} size={20} color={colors.muted} /></Pressable> : null}</View>{error ? <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text> : null}</View>;
 }
 
 export function Notice({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "error" | "success" }) {

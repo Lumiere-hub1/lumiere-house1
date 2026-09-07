@@ -18,5 +18,6 @@ export default function TabLayout() {
     <Tabs.Screen name="content" options={{ title: "Studio", tabBarIcon: ({ color }) => <MaterialIcons name="auto-awesome" size={22} color={color} /> }} />
     <Tabs.Screen name="automate" options={{ title: "Automate", tabBarIcon: ({ color }) => <MaterialIcons name="tune" size={22} color={color} /> }} />
     <Tabs.Screen name="connect" options={{ title: "Connect", tabBarIcon: ({ color }) => <MaterialIcons name="link" size={22} color={color} /> }} />
+    <Tabs.Screen name="settings" options={{ title: "Settings", tabBarIcon: ({ color }) => <MaterialIcons name="settings" size={22} color={color} /> }} />
   </Tabs>;
 }
