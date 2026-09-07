@@ -48,7 +48,21 @@ import { comparePeriods, summarizeCampaignEvents } from "../shared/results";
 // return type consistent, rather than mixing it with the callback-style pool
 // type that drizzle(connectionString) infers internally.
 function createDbConnection(databaseUrl: string) {
-  const pool = mysql.createPool({ uri: databaseUrl, ssl: { rejectUnauthorized: false } });
+  // Parse the connection string into explicit fields rather than passing
+  // { uri } alongside extra options: mysql2's merge behavior for a "uri" key
+  // inside an options object is not reliably documented across versions, and
+  // ssl-mode=REQUIRED in the URI itself is silently ignored (it is a MySQL
+  // CLI / PlanetScale-style param mysql2 does not recognize). Explicit
+  // fields avoid that ambiguity entirely for hosts like Aiven that require TLS.
+  const parsed = new URL(databaseUrl);
+  const pool = mysql.createPool({
+    host: parsed.hostname,
+    port: parsed.port ? Number(parsed.port) : 3306,
+    user: decodeURIComponent(parsed.username),
+    password: decodeURIComponent(parsed.password),
+    database: parsed.pathname.replace(/^\//, ""),
+    ssl: { rejectUnauthorized: false },
+  });
   return drizzle(pool);
 }
 
