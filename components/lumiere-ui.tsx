@@ -4,15 +4,21 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInpu
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 
+// Lumière's single black-first premium theme. "ink" and "cream" keep their
+// original names (used throughout the app as "primary text" and "text on an
+// accent surface" respectively) but now point at the dark-theme values so
+// every existing screen reads correctly on black without being touched
+// individually. "rose" is the champagne-gold accent used for CTAs, active
+// states, and highlights.
 export const brand = {
-  ink: "#14100E",
-  cream: "#F3E9DD",
-  rose: "#B8895F",
-  ember: "#C1432A",
-  sand: "#E8DCCF",
-  border: "#D8C9BA",
-  green: "#496451",
-  muted: "#6E6259",
+  ink: "#F3E9DD",
+  cream: "#0A0A0A",
+  rose: "#C9AE7B",
+  ember: "#F0A98A",
+  sand: "#1E1E1E",
+  border: "#2A2A2A",
+  green: "#9DC2A4",
+  muted: "#9C9086",
 };
 
 export function ScreenShell({ title, eyebrow, subtitle, action, children, scroll = true }: { title: string; eyebrow?: string; subtitle?: string; action?: ReactNode; children: ReactNode; scroll?: boolean }) {
@@ -118,7 +124,7 @@ export const styles = StyleSheet.create({
   subtitle: { fontSize: 15, lineHeight: 22 },
   sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: -6 },
   sectionLabel: { fontSize: 11, letterSpacing: 1.25, fontWeight: "700", textTransform: "uppercase" },
-  primaryButton: { minHeight: 48, paddingHorizontal: 18, borderRadius: 14, backgroundColor: brand.ink, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  primaryButton: { minHeight: 48, paddingHorizontal: 18, borderRadius: 14, backgroundColor: brand.rose, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   primaryButtonText: { color: brand.cream, fontSize: 15, fontWeight: "700" },
   secondaryButton: { minHeight: 46, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   secondaryButtonText: { fontSize: 15, fontWeight: "600" },
