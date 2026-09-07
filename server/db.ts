@@ -41,16 +41,23 @@ import { createOpaqueToken, hashOpaqueToken } from "./password";
 import { isWithinQuietHours } from "./validation";
 import { comparePeriods, summarizeCampaignEvents } from "../shared/results";
 
-let _db: ReturnType<typeof drizzle> | null = null;
+// mysql2's own URL parser does not understand "ssl-mode=REQUIRED" (a
+// MySQL-CLI/PlanetScale-style param), so hosts like Aiven that require TLS
+// need an explicit ssl option passed alongside the connection URI. Using
+// mysql2/promise's pool type here (inferred via this helper) keeps drizzle's
+// return type consistent, rather than mixing it with the callback-style pool
+// type that drizzle(connectionString) infers internally.
+function createDbConnection(databaseUrl: string) {
+  const pool = mysql.createPool({ uri: databaseUrl, ssl: { rejectUnauthorized: false } });
+  return drizzle(pool);
+}
+
+let _db: ReturnType<typeof createDbConnection> | null = null;
 
 export async function getDb() {
   if (!_db && ENV.databaseUrl) {
     try {
-      // mysql2's own URL parser does not understand "ssl-mode=REQUIRED" (a
-      // MySQL-CLI/PlanetScale-style param), so hosts like Aiven that require
-      // TLS need an explicit ssl option passed alongside the connection URI.
-      const pool = mysql.createPool({ uri: ENV.databaseUrl, ssl: { rejectUnauthorized: false } });
-      _db = drizzle(pool);
+      _db = createDbConnection(ENV.databaseUrl);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
