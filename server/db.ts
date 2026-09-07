@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
 import {
   analyticsEvents,
   authSessions,
@@ -45,7 +46,11 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && ENV.databaseUrl) {
     try {
-      _db = drizzle(ENV.databaseUrl);
+      // mysql2's own URL parser does not understand "ssl-mode=REQUIRED" (a
+      // MySQL-CLI/PlanetScale-style param), so hosts like Aiven that require
+      // TLS need an explicit ssl option passed alongside the connection URI.
+      const pool = mysql.createPool({ uri: ENV.databaseUrl, ssl: { rejectUnauthorized: false } });
+      _db = drizzle(pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
