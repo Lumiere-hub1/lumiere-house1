@@ -23,7 +23,14 @@ export async function enforceRateLimit(
     }
     return true;
   } catch (error) {
-    console.error(JSON.stringify({ event: "rate_limit_error", bucket: input.bucket, error: error instanceof Error ? error.message : "unknown" }));
+    const cause = error instanceof Error ? (error as { cause?: unknown }).cause : undefined;
+    console.error(JSON.stringify({
+      event: "rate_limit_error",
+      bucket: input.bucket,
+      error: error instanceof Error ? error.message : "unknown",
+      causeMessage: cause instanceof Error ? cause.message : cause ? String(cause) : undefined,
+      causeCode: cause && typeof cause === "object" && "code" in cause ? (cause as { code?: unknown }).code : undefined,
+    }));
     res.status(503).json({ error: "Request protection is temporarily unavailable." });
     return false;
   }
