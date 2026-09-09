@@ -3,6 +3,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getPerformanceProvider } from "./performance-provider";
 import { COOKIE_NAME } from "../shared/const.js";
+import { STUDIO_TOPIC_MAX, parseStudioCommand } from "../shared/studio-commands.js";
+import { AnthropicUnavailableError, generateScript } from "./_core/anthropic";
 import { invokeLLM } from "./_core/llm";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { adminProcedure, protectedProcedure, publicProcedure, router, workspaceProcedure } from "./_core/trpc";
@@ -13,7 +15,7 @@ import { parsePerformanceCsv } from "./validation";
 
 const goalTypeSchema = z.enum(["customers", "bookings", "sales", "leads", "launch", "content", "retention", "other"]);
 const platformSchema = z.enum(["tiktok", "instagram", "youtube", "facebook", "pinterest", "linkedin", "email", "website", "multi"]);
-const contentTypeSchema = z.enum(["image", "video", "copy", "social_post", "advertisement", "campaign", "email", "content_plan", "storyboard", "product_creative"]);
+const contentTypeSchema = z.enum(["image", "video", "copy", "social_post", "advertisement", "campaign", "email", "content_plan", "storyboard", "product_creative", "script"]);
 const scoreKeys = ["hook", "retention", "clarity", "emotion", "brandFit", "naturalness", "visualQuality", "artifactRisk", "offer", "cta", "conversionPotential", "platformFit", "originality", "professionalism"] as const;
 
 type UserLike = { id: number; openId: string; name: string | null; email: string | null; loginMethod: string | null; lastSignedIn: Date };
@@ -299,6 +301,75 @@ export const appRouter = router({
       if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "Content draft was not found." });
       return db.createApproval({ workspaceId: input.workspaceId, contentItemId: input.contentItemId, requestedByUserId: ctx.user.id, actionType: "approve_content", what: detail.item.desiredOutcome, why: input.why, whereTo: detail.item.platform, expectedPurpose: "Move a quality-reviewed draft toward human-approved publishing.", risk: detail.item.type === "advertisement" ? "high" : "medium" });
     }),
+  }),
+  studio: router({
+    /**
+     * Runs one Content Studio slash-command.
+     *
+     * Parsing uses the same shared rules as the client, so a command the UI
+     * accepted cannot be rejected here for a different reason. The generated
+     * script is persisted before it is returned, so what the user sees on
+     * screen is exactly what is in the database.
+     */
+    runCommand: workspaceProcedure
+      .input(z.object({
+        workspaceId: z.number().int().positive(),
+        command: z.string().trim().min(1).max(STUDIO_TOPIC_MAX + 64),
+        platform: platformSchema.default("tiktok"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await enforceTrpcRateLimit(ctx, "studio.command", `user:${ctx.user.id}:workspace:${input.workspaceId}`, 20, 10 * 60 * 1000);
+        await workspaceAccess(ctx.user.id, input.workspaceId, ["owner", "admin", "member"]);
+
+        const parsed = parseStudioCommand(input.command);
+        if (!parsed.ok) throw new TRPCError({ code: "BAD_REQUEST", message: parsed.message });
+
+        // Only /SCRIPT has a generator today. parseStudioCommand already
+        // rejects the others, so this is a guard against a future command
+        // being marked available before its branch is added here.
+        if (parsed.name !== "SCRIPT") {
+          throw new TRPCError({ code: "NOT_IMPLEMENTED", message: `/${parsed.name} is not available yet.` });
+        }
+
+        const business = await db.getBusiness(input.workspaceId);
+        const draft = await db.createContentDraft({
+          workspaceId: input.workspaceId,
+          createdByUserId: ctx.user.id,
+          type: "script",
+          platform: input.platform,
+          desiredOutcome: parsed.topic,
+        });
+
+        try {
+          const script = await generateScript({
+            topic: parsed.topic,
+            platform: input.platform,
+            businessName: business?.name,
+            industry: business?.industry || undefined,
+            targetCustomer: business?.targetCustomer || undefined,
+          });
+          // `body` holds the script as it is spoken, which is what the detail
+          // screen and any later export read. The structured parts are kept
+          // alongside it so a future /CAPTION or /HOOK can reuse them without
+          // re-parsing prose.
+          const spoken = `${script.hook}\n\n${script.body}\n\n${script.callToAction}`;
+          await db.updateContentRevision({
+            workspaceId: input.workspaceId,
+            userId: ctx.user.id,
+            contentItemId: draft.id,
+            headline: script.title,
+            body: spoken,
+            platformAdaptation: { hook: script.hook, body: script.body, callToAction: script.callToAction, estimatedSeconds: script.estimatedSeconds },
+            status: "draft",
+          });
+          return { contentItemId: draft.id, command: parsed.name, topic: parsed.topic, platform: input.platform, script };
+        } catch (error) {
+          // Never leave an orphan draft that looks like it is still generating.
+          const message = error instanceof AnthropicUnavailableError ? error.message : "The script engine is unavailable. No script was saved.";
+          await db.updateContentRevision({ workspaceId: input.workspaceId, userId: ctx.user.id, contentItemId: draft.id, headline: "Script generation blocked", body: message, status: "blocked" });
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message });
+        }
+      }),
   }),
   approvals: router({
     list: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive() })).query(async ({ ctx, input }) => { await workspaceAccess(ctx.user.id, input.workspaceId); return db.listApprovals(input.workspaceId); }),

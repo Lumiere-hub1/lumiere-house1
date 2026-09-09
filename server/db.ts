@@ -545,7 +545,7 @@ export async function createCampaign(input: { workspaceId: number; userId: numbe
   return db.select().from(campaigns).where(and(eq(campaigns.id, id), eq(campaigns.workspaceId, input.workspaceId))).limit(1).then((rows) => rows[0]);
 }
 
-export async function createContentDraft(input: { workspaceId: number; createdByUserId: number; goalId?: number; type: "image" | "video" | "copy" | "social_post" | "advertisement" | "campaign" | "email" | "content_plan" | "storyboard" | "product_creative"; platform: "tiktok" | "instagram" | "youtube" | "facebook" | "pinterest" | "linkedin" | "email" | "website" | "multi"; desiredOutcome: string; offer?: string; message?: string; cta?: string }) {
+export async function createContentDraft(input: { workspaceId: number; createdByUserId: number; goalId?: number; type: "image" | "video" | "copy" | "social_post" | "advertisement" | "campaign" | "email" | "content_plan" | "storyboard" | "product_creative" | "script"; platform: "tiktok" | "instagram" | "youtube" | "facebook" | "pinterest" | "linkedin" | "email" | "website" | "multi"; desiredOutcome: string; offer?: string; message?: string; cta?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available. Configure DATABASE_URL before using this operation.");
   const itemResult = await db.insert(contentItems).values({

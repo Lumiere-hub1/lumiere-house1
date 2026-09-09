@@ -16,6 +16,9 @@ export const ENV = {
   forgeApiKey: trim(process.env.BUILT_IN_FORGE_API_KEY),
     nvidiaApiKey: trim(process.env.NVIDIA_API_KEY),
   llmProvider: trim(process.env.LLM_PROVIDER),
+  // Used only by the Content Studio slash-commands (server/_core/anthropic.ts).
+  // Separate from the NVIDIA/Forge provider above, which drives content.generate.
+  anthropicApiKey: trim(process.env.ANTHROPIC_API_KEY),
   nvidiaModel: trim(process.env.NVIDIA_MODEL) || "nvidia/nemotron-3.5-lightning-30b-a3b",
   tiktok: {
     clientKey: trim(process.env.TIKTOK_CLIENT_KEY),
@@ -44,6 +47,7 @@ export function getRuntimeDiagnostics() {
     webPreviewConfigured: Boolean(ENV.webPreviewUrl),
     allowedOriginsConfigured: Boolean(ENV.allowedOrigins || ENV.webPreviewUrl),
     forgeConfigured: Boolean(ENV.forgeApiUrl && ENV.forgeApiKey),
+    anthropicConfigured: Boolean(ENV.anthropicApiKey),
     tiktokConfigured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid),
     tiktok: { configured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid), redirectValid: tiktokRedirectValid, missing: tiktokMissing },
   };
