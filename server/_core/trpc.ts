@@ -48,6 +48,34 @@ export const workspaceProcedure = protectedProcedure.use(
   }),
 );
 
+/**
+ * Workspace-scoped, and additionally requires a confirmed email address.
+ *
+ * Applied to actions that spend money, reach outside the product, or act on the
+ * user's behalf — not to reading, and deliberately NOT to workspace creation.
+ * Gating onboarding would leave a new account unable to do anything at all,
+ * which is the "block login entirely" behaviour under a different name; a user
+ * whose verification email is delayed or lost would be stuck with no route
+ * forward. They can look around and finish setup; they cannot burn API credits
+ * or connect a third-party account until the address is confirmed.
+ */
+export const verifiedWorkspaceProcedure = workspaceProcedure.use(
+  t.middleware(async (opts) => {
+    const { ctx, next } = opts;
+    const user = ctx.user;
+    if (!user?.emailVerifiedAt) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Confirm your email address to use this. Check your inbox, or request a new confirmation link from Settings.",
+      });
+    }
+    // Pass `user` through explicitly: spreading ctx alone widens it back to the
+    // base context, where user is nullable, and every downstream ctx.user
+    // access stops type-checking.
+    return next({ ctx: { ...ctx, user } });
+  }),
+);
+
 export const adminProcedure = t.procedure.use(
   t.middleware(async (opts) => {
     const { ctx, next } = opts;
