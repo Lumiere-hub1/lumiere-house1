@@ -23,7 +23,12 @@ export default function SignupScreen() {
       const result = await signup.mutateAsync({ name: name.trim(), email: email.trim(), password });
       await Auth.setSessionToken(result.sessionToken);
       await Auth.setUserInfo(result.user);
-      router.replace("/");
+      // Straight to onboarding rather than "/". A brand-new account never has a
+      // workspace, so "/" could only bounce through its own auth and workspace
+      // lookups to land here anyway — and if either came back empty for any
+      // reason it rendered the public landing page instead, which reads as
+      // being dumped back on the signup screen.
+      router.replace("/onboarding" as any);
     } catch {
       // The mutation error is rendered below.
     }

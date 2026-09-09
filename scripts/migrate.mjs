@@ -14,6 +14,10 @@
  * Drizzle records what it has applied in __drizzle_migrations, so running this
  * repeatedly is a no-op.
  */
+// Same convention as server/app.ts: load .env, without overriding anything
+// already set in the real environment. Without this, `pnpm db:migrate` would
+// not see a DATABASE_URL that lives only in .env.
+import "dotenv/config";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { drizzle } from "drizzle-orm/mysql2";

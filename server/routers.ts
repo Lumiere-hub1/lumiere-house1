@@ -8,7 +8,9 @@ import { AnthropicUnavailableError, generateScript } from "./_core/anthropic";
 import { YouTubeUnavailableError, fetchTrendingVideos } from "./_core/youtube";
 import { invokeLLM } from "./_core/llm";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { adminProcedure, protectedProcedure, publicProcedure, router, workspaceProcedure } from "./_core/trpc";
+import { sendVerificationEmail } from "./_core/email";
+import { ENV } from "./_core/env";
+import { adminProcedure, protectedProcedure, publicProcedure, router, verifiedWorkspaceProcedure, workspaceProcedure } from "./_core/trpc";
 import { systemRouter } from "./_core/systemRouter";
 import * as db from "./db";
 import { hashPassword, validatePassword, verifyPassword } from "./password";
@@ -19,7 +21,7 @@ const platformSchema = z.enum(["tiktok", "instagram", "youtube", "facebook", "pi
 const contentTypeSchema = z.enum(["image", "video", "copy", "social_post", "advertisement", "campaign", "email", "content_plan", "storyboard", "product_creative", "script"]);
 const scoreKeys = ["hook", "retention", "clarity", "emotion", "brandFit", "naturalness", "visualQuality", "artifactRisk", "offer", "cta", "conversionPotential", "platformFit", "originality", "professionalism"] as const;
 
-type UserLike = { id: number; openId: string; name: string | null; email: string | null; loginMethod: string | null; lastSignedIn: Date };
+type UserLike = { id: number; openId: string; name: string | null; email: string | null; loginMethod: string | null; lastSignedIn: Date; emailVerifiedAt?: Date | null };
 
 function publicUser(user: UserLike) {
   return {
@@ -29,7 +31,25 @@ function publicUser(user: UserLike) {
     email: user.email,
     loginMethod: user.loginMethod,
     lastSignedIn: user.lastSignedIn,
+    // Surfaced so the client can show the unverified banner and gate its own
+    // affordances; the server enforces independently via verifiedWorkspaceProcedure.
+    emailVerified: Boolean(user.emailVerifiedAt),
   };
+}
+
+/**
+ * Absolute URL for a link the user will follow from outside the app (an email).
+ * Prefers APP_BASE_URL so the link is stable regardless of which host served
+ * the request, and falls back to the request's own origin so local development
+ * and preview deployments work with no configuration.
+ */
+function buildAppUrl(req: { protocol: string; get?: (name: string) => string | undefined; headers: Record<string, string | string[] | undefined> }, path: string) {
+  if (ENV.appBaseUrl) return `${ENV.appBaseUrl.replace(/\/$/, "")}${path}`;
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const host = (typeof forwardedHost === "string" ? forwardedHost.split(",")[0].trim() : undefined) || req.get?.("host") || (typeof req.headers.host === "string" ? req.headers.host : "");
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const protocol = (typeof forwardedProto === "string" ? forwardedProto.split(",")[0].trim() : undefined) || req.protocol || "https";
+  return `${protocol}://${host}${path}`;
 }
 
 function getRequestToken(req: { headers: Record<string, string | string[] | undefined> }) {
@@ -197,7 +217,27 @@ export const appRouter = router({
         const verification = await db.createEmailVerificationToken(user.id);
         const session = await db.createSession(user.id);
         ctx.res.cookie(COOKIE_NAME, session.token, getSessionCookieOptions(ctx.req));
-        return { user: publicUser(user), sessionToken: session.token, emailVerified: Boolean(user.emailVerifiedAt), verification: { status: "not_sent", message: "Account created. Email verification delivery is not configured, so no verification email was sent.", developmentToken: process.env.NODE_ENV === "production" ? undefined : verification.token } };
+        // Delivery is attempted but never allowed to fail the signup: the
+        // account exists either way, and reporting failure as "signup failed"
+        // would be untrue. The status is passed through so the UI can say what
+        // actually happened rather than assume an email is on its way.
+        const delivery = await sendVerificationEmail({
+          to: input.email,
+          name: user.name,
+          verifyUrl: buildAppUrl(ctx.req, `/verify-email?token=${encodeURIComponent(verification.token)}`),
+        });
+        return {
+          user: publicUser(user),
+          sessionToken: session.token,
+          emailVerified: Boolean(user.emailVerifiedAt),
+          verification: {
+            status: delivery.status,
+            message: delivery.message,
+            // Local development only, so verification is testable without a
+            // configured provider. Never present in production.
+            developmentToken: process.env.NODE_ENV === "production" ? undefined : verification.token,
+          },
+        };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "Could not create account." });
@@ -236,6 +276,20 @@ export const appRouter = router({
       const user = await db.verifyEmail(found.user.id, found.token.id);
       return { verified: true, user: user ? publicUser(user) : null };
     }),
+    resendVerification: protectedProcedure.mutation(async ({ ctx }) => {
+      // Rate limited per user, not per email: the address is already known, and
+      // this is an authenticated route, so the account is the right subject.
+      await enforceTrpcRateLimit(ctx, "auth.resend_verification", `user:${ctx.user.id}`, 5, 15 * 60 * 1000);
+      if (ctx.user.emailVerifiedAt) return { status: "already_verified" as const, message: "This email address is already confirmed." };
+      if (!ctx.user.email) throw new TRPCError({ code: "BAD_REQUEST", message: "This account has no email address to confirm." });
+      const verification = await db.createEmailVerificationToken(ctx.user.id);
+      const delivery = await sendVerificationEmail({
+        to: ctx.user.email,
+        name: ctx.user.name,
+        verifyUrl: buildAppUrl(ctx.req, `/verify-email?token=${encodeURIComponent(verification.token)}`),
+      });
+      return { status: delivery.status, message: delivery.message };
+    }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
       const token = getRequestToken(ctx.req);
       if (token?.startsWith("lh_")) await db.revokeSession(token);
@@ -260,7 +314,7 @@ export const appRouter = router({
   content: router({
     list: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive() })).query(async ({ ctx, input }) => { await workspaceAccess(ctx.user.id, input.workspaceId); return db.listContent(input.workspaceId); }),
     detail: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), contentItemId: z.number().int().positive() })).query(async ({ ctx, input }) => { await workspaceAccess(ctx.user.id, input.workspaceId); const detail = await db.getContentDetail(input.workspaceId, input.contentItemId); if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "Content was not found in this workspace." }); return detail; }),
-    generate: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), goalId: z.number().int().positive().optional(), type: contentTypeSchema, platform: platformSchema, desiredOutcome: z.string().trim().min(8).max(2000), offer: z.string().max(2000).optional(), message: z.string().max(2000).optional(), cta: z.string().max(255).optional() })).mutation(async ({ ctx, input }) => {
+    generate: verifiedWorkspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), goalId: z.number().int().positive().optional(), type: contentTypeSchema, platform: platformSchema, desiredOutcome: z.string().trim().min(8).max(2000), offer: z.string().max(2000).optional(), message: z.string().max(2000).optional(), cta: z.string().max(255).optional() })).mutation(async ({ ctx, input }) => {
       await enforceTrpcRateLimit(ctx, "ai.generate", `user:${ctx.user.id}:workspace:${input.workspaceId}`, 10, 10 * 60 * 1000);
       await workspaceAccess(ctx.user.id, input.workspaceId, ["owner", "admin", "member"]);
       const draft = await db.createContentDraft({
@@ -299,7 +353,7 @@ export const appRouter = router({
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: error instanceof Error ? error.message : "The content engine is unavailable. No content was approved or published." });
       }
     }),
-    improve: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), contentItemId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    improve: verifiedWorkspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), contentItemId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       await enforceTrpcRateLimit(ctx, "ai.improve", `user:${ctx.user.id}:workspace:${input.workspaceId}`, 10, 10 * 60 * 1000);
       await workspaceAccess(ctx.user.id, input.workspaceId, ["owner", "admin", "member"]);
       const detail = await db.getContentDetail(input.workspaceId, input.contentItemId);
@@ -335,7 +389,11 @@ export const appRouter = router({
      * script is persisted before it is returned, so what the user sees on
      * screen is exactly what is in the database.
      */
-    runCommand: workspaceProcedure
+    // Verified like content.generate: /SCRIPT spends Anthropic credits and
+    // /TRENDS spends a shared YouTube quota, so an unverified account must not
+    // reach either. The two were built on separate branches, so neither saw the
+    // other's gating until they were merged.
+    runCommand: verifiedWorkspaceProcedure
       .input(z.object({
         workspaceId: z.number().int().positive(),
         command: z.string().trim().min(1).max(STUDIO_TOPIC_MAX + 64),
@@ -450,7 +508,7 @@ export const appRouter = router({
       if (!rows.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Add at least one CSV data row." });
       return db.createPerformanceImport({ workspaceId: input.workspaceId, userId: ctx.user.id, source: input.source, rows });
     }),
-    importFromConnector: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), provider: z.string().trim().min(2).max(120), idempotencyKey: z.string().trim().min(8).max(255) })).mutation(async ({ ctx, input }) => {
+    importFromConnector: verifiedWorkspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), provider: z.string().trim().min(2).max(120), idempotencyKey: z.string().trim().min(8).max(255) })).mutation(async ({ ctx, input }) => {
       await enforceTrpcRateLimit(ctx, "performance.import", `user:${ctx.user.id}:workspace:${input.workspaceId}`, 20, 10 * 60 * 1000);
       await workspaceAccess(ctx.user.id, input.workspaceId, ["owner", "admin", "member"]);
       const connector = (await db.listConnectors(input.workspaceId)).find((item) => item.provider === input.provider);

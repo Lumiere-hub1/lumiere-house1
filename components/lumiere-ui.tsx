@@ -2,6 +2,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { ReactNode, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
+import { UnverifiedEmailBanner } from "@/components/unverified-email-banner";
 import { Colors } from "@/constants/theme";
 import { useColors } from "@/hooks/use-colors";
 
@@ -33,6 +34,9 @@ export function ScreenShell({ title, eyebrow, subtitle, action, children, scroll
         </View>
         {action}
       </View>
+      {/* Follows the user across every screen rather than living on one they
+          might never revisit. Renders nothing when signed out or verified. */}
+      <UnverifiedEmailBanner />
       {children}
     </View>
   );
