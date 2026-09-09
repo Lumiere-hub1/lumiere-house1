@@ -49,9 +49,24 @@ export const STUDIO_TOPIC_MAX = 2000;
 /** Shortest topic that can produce something useful rather than a guess. */
 export const STUDIO_TOPIC_MIN = 8;
 
+export type StudioCommandRejection = { ok: false; reason: "empty" | "missing_slash" | "unknown_command" | "unavailable_command" | "topic_too_short" | "topic_too_long"; message: string; name?: StudioCommandName };
+
 export type ParsedStudioCommand =
   | { ok: true; name: StudioCommandName; topic: string }
-  | { ok: false; reason: "empty" | "missing_slash" | "unknown_command" | "unavailable_command" | "topic_too_short" | "topic_too_long"; message: string; name?: StudioCommandName };
+  | StudioCommandRejection;
+
+/**
+ * Narrows a parse result to its rejection branch.
+ *
+ * `if (!parsed.ok)` is enough under this repo's tsconfig, but Vercel compiles
+ * server/ with its own non-strict config, and without strictNullChecks
+ * TypeScript does not narrow a union on a boolean discriminant — the deploy
+ * failed with TS2339 on `parsed.message` while `pnpm check` passed locally.
+ * An explicit type predicate narrows the same way under either setting.
+ */
+export function isStudioCommandRejected(parsed: ParsedStudioCommand): parsed is StudioCommandRejection {
+  return !parsed.ok;
+}
 
 /**
  * Parses raw input such as `/SCRIPT overdue rebooking reminder for a lash client`.

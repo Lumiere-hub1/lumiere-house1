@@ -25,9 +25,15 @@ const migrationsFolder = path.resolve(fileURLToPath(new URL("../drizzle", import
 async function main() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) {
-    // Deliberately not fatal: local checkouts and CI runs without a database
-    // still need to build. The line is loud so a misconfigured deployment is
-    // visible in the build log rather than silently shipping an unmigrated app.
+    // Fatal for a production build, because shipping production against an
+    // unmigrated schema is exactly the outage this script exists to prevent.
+    // A failed build leaves the previous deployment serving traffic.
+    if (process.env.VERCEL_ENV === "production") {
+      throw new Error("DATABASE_URL is not available to the production build. Migrations cannot be applied, so this build would ship against an unmigrated schema. Set DATABASE_URL for the Production environment in the Vercel project settings.");
+    }
+    // Non-fatal elsewhere: local checkouts, CI, and preview builds without a
+    // database still need to build. The line is loud so a misconfigured
+    // deployment is visible in the build log.
     console.warn("[migrate] DATABASE_URL is not set — SKIPPING migrations. The deployed app will fail on any query against an unmigrated table.");
     return;
   }

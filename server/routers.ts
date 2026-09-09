@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getPerformanceProvider } from "./performance-provider";
 import { COOKIE_NAME } from "../shared/const.js";
-import { STUDIO_TOPIC_MAX, parseStudioCommand } from "../shared/studio-commands.js";
+import { STUDIO_TOPIC_MAX, isStudioCommandRejected, parseStudioCommand } from "../shared/studio-commands.js";
 import { AnthropicUnavailableError, generateScript } from "./_core/anthropic";
 import { invokeLLM } from "./_core/llm";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -345,7 +345,7 @@ export const appRouter = router({
         await workspaceAccess(ctx.user.id, input.workspaceId, ["owner", "admin", "member"]);
 
         const parsed = parseStudioCommand(input.command);
-        if (!parsed.ok) throw new TRPCError({ code: "BAD_REQUEST", message: parsed.message });
+        if (isStudioCommandRejected(parsed)) throw new TRPCError({ code: "BAD_REQUEST", message: parsed.message });
 
         // Only /SCRIPT has a generator today. parseStudioCommand already
         // rejects the others, so this is a guard against a future command
