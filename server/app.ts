@@ -6,6 +6,7 @@ import { ENV, getRuntimeDiagnostics } from "./_core/env";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./_core/oauth";
 import { registerTikTokOAuthRoutes } from "./_core/tiktokOAuth";
+import { registerTelegramRoutes } from "./_core/telegram";
 import { registerStorageProxy } from "./_core/storageProxy";
 import { appRouter } from "./routers";
 import { createContext } from "./_core/context";
@@ -56,6 +57,7 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 registerStorageProxy(app);
 registerOAuthRoutes(app);
 registerTikTokOAuthRoutes(app);
+registerTelegramRoutes(app);
 
 const healthHandler = (_req: express.Request, res: express.Response) => {
   const diagnostics = getRuntimeDiagnostics();
