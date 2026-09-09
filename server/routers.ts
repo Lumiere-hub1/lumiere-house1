@@ -5,6 +5,7 @@ import { getPerformanceProvider } from "./performance-provider";
 import { COOKIE_NAME } from "../shared/const.js";
 import { STUDIO_TOPIC_MAX, isStudioCommandRejected, parseStudioCommand } from "../shared/studio-commands.js";
 import { AnthropicUnavailableError, generateScript } from "./_core/anthropic";
+import { YouTubeUnavailableError, fetchTrendingVideos } from "./_core/youtube";
 import { invokeLLM } from "./_core/llm";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { adminProcedure, protectedProcedure, publicProcedure, router, workspaceProcedure } from "./_core/trpc";
@@ -347,9 +348,25 @@ export const appRouter = router({
         const parsed = parseStudioCommand(input.command);
         if (isStudioCommandRejected(parsed)) throw new TRPCError({ code: "BAD_REQUEST", message: parsed.message });
 
-        // Only /SCRIPT has a generator today. parseStudioCommand already
-        // rejects the others, so this is a guard against a future command
-        // being marked available before its branch is added here.
+        // /TRENDS is research, not authoring: it reads YouTube and returns what
+        // it found. Deliberately no content draft — a draft the user did not
+        // write would clutter Draft history with rows nobody asked for.
+        if (parsed.name === "TRENDS") {
+          // Tighter than the shared command limit because each call spends 100
+          // units of a 10,000/day YouTube quota shared by the whole product —
+          // roughly 100 searches a day across every workspace.
+          await enforceTrpcRateLimit(ctx, "studio.trends", `workspace:${input.workspaceId}`, 5, 60 * 60 * 1000);
+          try {
+            const videos = await fetchTrendingVideos(parsed.topic);
+            return { command: "TRENDS" as const, topic: parsed.topic, videos };
+          } catch (error) {
+            const message = error instanceof YouTubeUnavailableError ? error.message : "Trend research is unavailable right now.";
+            throw new TRPCError({ code: "PRECONDITION_FAILED", message });
+          }
+        }
+
+        // Guard against a future command being marked available in the registry
+        // before its branch is added here.
         if (parsed.name !== "SCRIPT") {
           throw new TRPCError({ code: "NOT_IMPLEMENTED", message: `/${parsed.name} is not available yet.` });
         }
@@ -385,7 +402,7 @@ export const appRouter = router({
             platformAdaptation: { hook: script.hook, body: script.body, callToAction: script.callToAction, estimatedSeconds: script.estimatedSeconds },
             status: "draft",
           });
-          return { contentItemId: draft.id, command: parsed.name, topic: parsed.topic, platform: input.platform, script };
+          return { command: "SCRIPT" as const, contentItemId: draft.id, topic: parsed.topic, platform: input.platform, script };
         } catch (error) {
           // Never leave an orphan draft that looks like it is still generating.
           const message = error instanceof AnthropicUnavailableError ? error.message : "The script engine is unavailable. No script was saved.";

@@ -12,7 +12,7 @@
  * parsing, validation, the UI list, the error copy — already handles it.
  */
 
-export const STUDIO_COMMAND_NAMES = ["SCRIPT", "CAPTION", "HOOK", "VIDEO", "IMAGE"] as const;
+export const STUDIO_COMMAND_NAMES = ["SCRIPT", "TRENDS", "CAPTION", "HOOK", "VIDEO", "IMAGE"] as const;
 
 export type StudioCommandName = (typeof STUDIO_COMMAND_NAMES)[number];
 
@@ -34,6 +34,13 @@ export const STUDIO_COMMANDS: Record<StudioCommandName, StudioCommandSpec> = {
     label: "/SCRIPT",
     hint: "Short-form video script with a hook, body, and call to action.",
     example: "/SCRIPT overdue rebooking reminder for a lash client",
+    available: true,
+  },
+  TRENDS: {
+    name: "TRENDS",
+    label: "/TRENDS",
+    hint: "What is getting views on YouTube for a topic, in the last 30 days.",
+    example: "/TRENDS lash extension aftercare",
     available: true,
   },
   CAPTION: { name: "CAPTION", label: "/CAPTION", hint: "Post caption. Not available yet.", example: "/CAPTION …", available: false },

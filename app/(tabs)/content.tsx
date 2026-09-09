@@ -1,10 +1,17 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Linking, Pressable, Text, View } from "react-native";
 import { Field, EmptyState, LoadingState, Notice, PrimaryButton, ScreenShell, SecondaryButton, SectionLabel, StatusPill, Surface, brand } from "@/components/lumiere-ui";
 import { trpc } from "@/lib/trpc";
 import { useWorkspace } from "@/hooks/use-workspace";
 import { AVAILABLE_STUDIO_COMMANDS, STUDIO_COMMANDS, parseStudioCommand } from "@/shared/studio-commands";
+
+/** 12345 -> "12.3K". Raw view counts are hard to scan at a glance. */
+function formatCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(value);
+}
 
 /** Platforms a short-form script is written for. */
 const scriptPlatforms = ["tiktok", "instagram", "youtube"] as const;
@@ -38,6 +45,9 @@ export default function ContentStudioScreen() {
   // The same parser the server uses, so the button is enabled exactly when the
   // request would be accepted.
   const parsedCommand = parseStudioCommand(command);
+  // Bound to a const so the discriminated-union narrowing below survives into
+  // the onPress closure; reading runCommand.data there would widen it again.
+  const commandResult = runCommand.data;
 
   const submitCommand = async () => {
     if (!workspaceId || !parsedCommand.ok) return;
@@ -86,16 +96,40 @@ export default function ContentStudioScreen() {
         </View>
       </Surface>
 
-      {runCommand.data ? <Surface>
+      {commandResult?.command === "SCRIPT" ? <Surface>
         <View style={{ gap: 14 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-            <Text style={{ color: brand.text, fontSize: 17, fontWeight: "700", flex: 1, lineHeight: 23 }}>{runCommand.data.script.title}</Text>
-            <StatusPill label={`~${runCommand.data.script.estimatedSeconds}s`} tone="success" />
+            <Text style={{ color: brand.text, fontSize: 17, fontWeight: "700", flex: 1, lineHeight: 23 }}>{commandResult.script.title}</Text>
+            <StatusPill label={`~${commandResult.script.estimatedSeconds}s`} tone="success" />
           </View>
-          <ScriptPart label="Hook" text={runCommand.data.script.hook} />
-          <ScriptPart label="Script" text={runCommand.data.script.body} />
-          <ScriptPart label="Call to action" text={runCommand.data.script.callToAction} />
-          <SecondaryButton label="Open in drafts" onPress={() => router.push({ pathname: "/content/detail" as any, params: { id: String(runCommand.data!.contentItemId) } })} icon="arrow-forward" />
+          <ScriptPart label="Hook" text={commandResult.script.hook} />
+          <ScriptPart label="Script" text={commandResult.script.body} />
+          <ScriptPart label="Call to action" text={commandResult.script.callToAction} />
+          <SecondaryButton label="Open in drafts" onPress={() => router.push({ pathname: "/content/detail" as any, params: { id: String(commandResult.contentItemId) } })} icon="arrow-forward" />
+        </View>
+      </Surface> : null}
+
+      {commandResult?.command === "TRENDS" ? <Surface>
+        <View style={{ gap: 14 }}>
+          <View style={{ gap: 4 }}>
+            <Text style={{ color: brand.text, fontSize: 17, fontWeight: "700", lineHeight: 23 }}>Most viewed in the last 30 days</Text>
+            <Text style={{ color: brand.muted, fontSize: 13, lineHeight: 19 }}>{commandResult.topic}</Text>
+          </View>
+          {commandResult.videos.length === 0
+            ? <Text style={{ color: brand.muted, fontSize: 13, lineHeight: 19 }}>Nothing published in the last 30 days matched that. Try a broader topic.</Text>
+            : commandResult.videos.map((video) => (
+                <Pressable key={video.videoId} accessibilityRole="link" accessibilityLabel={video.title} onPress={() => Linking.openURL(video.url)} style={({ pressed }) => pressed && { opacity: 0.7 }}>
+                  <View style={{ gap: 5, paddingVertical: 8, borderTopWidth: 1, borderTopColor: brand.border }}>
+                    <Text style={{ color: brand.text, fontSize: 14, fontWeight: "600", lineHeight: 20 }}>{video.title}</Text>
+                    <Text style={{ color: brand.muted, fontSize: 12 }}>
+                      {video.channelTitle} · {formatCount(video.viewCount)} views · {formatCount(video.likeCount)} likes
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+          <Text style={{ color: brand.muted, fontSize: 11, lineHeight: 16 }}>
+            Research only. Nothing here was saved to your drafts. Use /SCRIPT to write something of your own.
+          </Text>
         </View>
       </Surface> : null}
 

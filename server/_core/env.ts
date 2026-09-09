@@ -19,6 +19,9 @@ export const ENV = {
   // Used only by the Content Studio slash-commands (server/_core/anthropic.ts).
   // Separate from the NVIDIA/Forge provider above, which drives content.generate.
   anthropicApiKey: trim(process.env.ANTHROPIC_API_KEY),
+  // YouTube Data API v3 key for the /TRENDS command. A plain API key from
+  // Google Cloud Console — an OAuth client id/secret will not work here.
+  youtubeApiKey: trim(process.env.YOUTUBE_API_KEY),
   nvidiaModel: trim(process.env.NVIDIA_MODEL) || "nvidia/nemotron-3.5-lightning-30b-a3b",
   tiktok: {
     clientKey: trim(process.env.TIKTOK_CLIENT_KEY),
@@ -48,6 +51,7 @@ export function getRuntimeDiagnostics() {
     allowedOriginsConfigured: Boolean(ENV.allowedOrigins || ENV.webPreviewUrl),
     forgeConfigured: Boolean(ENV.forgeApiUrl && ENV.forgeApiKey),
     anthropicConfigured: Boolean(ENV.anthropicApiKey),
+    youtubeConfigured: Boolean(ENV.youtubeApiKey),
     tiktokConfigured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid),
     tiktok: { configured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid), redirectValid: tiktokRedirectValid, missing: tiktokMissing },
   };
