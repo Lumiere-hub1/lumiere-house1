@@ -81,6 +81,30 @@ app.use(
 // Placed after all API/health/oauth routes so those always take priority; only
 // requests that don't match an API route fall through to static files here.
 const webBuildDir = path.join(process.cwd(), "public");
+
+// Expo exports a prerendered `<route>.html` for every static route, but a route
+// that also has children gets a directory of the same name beside it — e.g.
+// `content.html` next to `content/detail.html`. `express.static` stats the
+// directory first, redirects `/content` to `/content/`, finds no
+// `content/index.html` inside, and falls through to the SPA catch-all below, so
+// that route was served the generic app shell instead of its own prerender.
+// Resolving the sibling `<route>.html` before the static handler fixes those
+// routes; anything without a matching `.html` (including `/content/detail`,
+// which has one, and genuinely dynamic paths, which don't) is untouched and
+// falls through exactly as before.
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api/") || req.path === "/health") return next();
+  if (req.path === "/" || path.extname(req.path)) return next();
+  const candidate = path.resolve(webBuildDir, `.${req.path}.html`);
+  // Refuse anything that escapes the build directory (e.g. encoded traversal).
+  if (!candidate.startsWith(webBuildDir + path.sep)) return next();
+  res.sendFile(candidate, (err) => {
+    if (!err) return;
+    if (res.headersSent) return;
+    next();
+  });
+});
+
 app.use(express.static(webBuildDir, { extensions: ["html"] }));
 
 // Client-side routes with no matching static file (e.g. dynamic segments) fall
