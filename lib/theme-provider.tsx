@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { Appearance, View, useColorScheme as useSystemColorScheme } from "react-native";
+import { Appearance, View } from "react-native";
 import { colorScheme as nativewindColorScheme, vars } from "nativewind";
 
 import { SchemeColors, type ColorScheme } from "@/constants/theme";
@@ -12,10 +12,12 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const systemScheme = useSystemColorScheme() ?? "light";
-  // Lumière runs a single black-first premium theme regardless of the
-  // device's system appearance setting; systemScheme is retained above
-  // only in case a future user-facing light/dark toggle is added.
+  // Lumière runs a single black-first premium theme regardless of the device's
+  // system appearance setting, so this is seeded to "dark" and never reads
+  // Appearance. Deliberately NOT derived from the system scheme: doing so made
+  // the first (pre-hydration) paint disagree with the client paint. Both
+  // schemes resolve to the same palette in theme.config.js anyway, so this is
+  // belt-and-braces rather than the sole guarantee.
   const [colorScheme, setColorSchemeState] = useState<ColorScheme>("dark");
 
   const applyScheme = useCallback((scheme: ColorScheme) => {
@@ -47,6 +49,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         "color-primary": SchemeColors[colorScheme].primary,
         "color-background": SchemeColors[colorScheme].background,
         "color-surface": SchemeColors[colorScheme].surface,
+        "color-elevated": SchemeColors[colorScheme].elevated,
         "color-foreground": SchemeColors[colorScheme].foreground,
         "color-muted": SchemeColors[colorScheme].muted,
         "color-border": SchemeColors[colorScheme].border,

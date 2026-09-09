@@ -54,7 +54,7 @@ const config: ExpoConfig = {
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: "#14100E",
+      backgroundColor: "#0A0A0A",
       foregroundImage: "./assets/images/android-icon-foreground.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -103,9 +103,11 @@ const config: ExpoConfig = {
         image: "./assets/images/splash-icon.png",
         imageWidth: 200,
         resizeMode: "contain",
-        backgroundColor: "#F3E9DD",
+        // Single black-first theme — the splash must not flash cream before
+        // the app paints. Both entries are the same near-black on purpose.
+        backgroundColor: "#0A0A0A",
         dark: {
-          backgroundColor: "#14100E",
+          backgroundColor: "#0A0A0A",
         },
       },
     ],

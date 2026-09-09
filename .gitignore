@@ -9,6 +9,10 @@ dist/
 web-build/
 expo-env.d.ts
 
+# Web export output produced by the Vercel build command (see vercel.json)
+public/
+.vercel-web-build/
+
 # Native
 .kotlin/
 *.orig.*

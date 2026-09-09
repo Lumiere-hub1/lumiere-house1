@@ -2,23 +2,23 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { ReactNode, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
+import { Colors } from "@/constants/theme";
 import { useColors } from "@/hooks/use-colors";
 
-// Lumière's single black-first premium theme. "ink" and "cream" keep their
-// original names (used throughout the app as "primary text" and "text on an
-// accent surface" respectively) but now point at the dark-theme values so
-// every existing screen reads correctly on black without being touched
-// individually. "rose" is the champagne-gold accent used for CTAs, active
-// states, and highlights.
+// Static aliases into the single black-first palette, for the many inline
+// styles that need a colour outside a component (StyleSheet.create) or without
+// calling useColors(). Derived from theme.config.js rather than re-typing the
+// hexes, so the palette has exactly one source of truth and these can never
+// drift out of sync with the CSS variables the way a duplicated literal can.
 export const brand = {
-  ink: "#F3E9DD",
-  cream: "#0A0A0A",
-  rose: "#C9AE7B",
-  ember: "#F0A98A",
-  sand: "#1E1E1E",
-  border: "#2A2A2A",
-  green: "#9DC2A4",
-  muted: "#9C9086",
+  text: Colors.dark.foreground, // #F3E9DD — primary text on any dark ground
+  onAccent: Colors.dark.background, // #0A0A0A — text/icons ON a gold fill
+  rose: Colors.dark.primary, // #C9AE7B — champagne gold accent
+  ember: Colors.dark.error,
+  sand: Colors.dark.elevated,
+  border: Colors.dark.border,
+  green: Colors.dark.success,
+  muted: Colors.dark.muted,
 };
 
 export function ScreenShell({ title, eyebrow, subtitle, action, children, scroll = true }: { title: string; eyebrow?: string; subtitle?: string; action?: ReactNode; children: ReactNode; scroll?: boolean }) {
@@ -45,7 +45,7 @@ export function SectionLabel({ children, action }: { children: ReactNode; action
 }
 
 export function PrimaryButton({ label, onPress, loading = false, disabled = false, icon }: { label: string; onPress: () => void; loading?: boolean; disabled?: boolean; icon?: keyof typeof MaterialIcons.glyphMap }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled || loading} style={({ pressed }) => [styles.primaryButton, (disabled || loading) && styles.disabled, pressed && styles.pressed]}>{icon ? <MaterialIcons name={icon} size={18} color={brand.cream} /> : null}<Text style={styles.primaryButtonText}>{loading ? "Working…" : label}</Text></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled || loading} style={({ pressed }) => [styles.primaryButton, (disabled || loading) && styles.disabled, pressed && styles.pressed]}>{icon ? <MaterialIcons name={icon} size={18} color={brand.onAccent} /> : null}<Text style={styles.primaryButtonText}>{loading ? "Working…" : label}</Text></Pressable>;
 }
 
 export function SecondaryButton({ label, onPress, disabled = false, icon }: { label: string; onPress: () => void; disabled?: boolean; icon?: keyof typeof MaterialIcons.glyphMap }) {
@@ -60,7 +60,11 @@ export function IconButton({ icon, label, onPress }: { icon: keyof typeof Materi
 
 export function Surface({ children, tone = "surface", style }: { children: ReactNode; tone?: "surface" | "ink" | "accent" | "risk"; style?: object }) {
   const colors = useColors();
-  const backgroundColor = tone === "ink" ? colors.foreground : tone === "accent" ? colors.primary : tone === "risk" ? `${colors.error}18` : colors.surface;
+  // "ink" is the raised callout panel. It used to paint colors.foreground —
+  // which in a black-first palette is the off-white #F3E9DD, i.e. a cream card
+  // — leaving its body copy unreadable. It is now the elevated dark panel it
+  // was always meant to be.
+  const backgroundColor = tone === "ink" ? colors.elevated : tone === "accent" ? colors.primary : tone === "risk" ? `${colors.error}18` : colors.surface;
   return <View style={[styles.surface, { backgroundColor, borderColor: colors.border }, style]}>{children}</View>;
 }
 
@@ -125,7 +129,7 @@ export const styles = StyleSheet.create({
   sectionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: -6 },
   sectionLabel: { fontSize: 11, letterSpacing: 1.25, fontWeight: "700", textTransform: "uppercase" },
   primaryButton: { minHeight: 48, paddingHorizontal: 18, borderRadius: 14, backgroundColor: brand.rose, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  primaryButtonText: { color: brand.cream, fontSize: 15, fontWeight: "700" },
+  primaryButtonText: { color: brand.onAccent, fontSize: 15, fontWeight: "700" },
   secondaryButton: { minHeight: 46, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   secondaryButtonText: { fontSize: 15, fontWeight: "600" },
   iconButton: { height: 42, width: 42, borderRadius: 13, borderWidth: 1, alignItems: "center", justifyContent: "center" },
