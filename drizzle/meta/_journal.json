@@ -43,6 +43,13 @@
       "when": 1787618783784,
       "tag": "0005_small_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1788917904187,
+      "tag": "0006_overconfident_grey_gargoyle",
+      "breakpoints": true
     }
   ]
 }

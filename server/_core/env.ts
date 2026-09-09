@@ -25,7 +25,13 @@ export const ENV = {
   // Telegram support bot (server/_core/telegram.ts).
   telegramBotToken: trim(process.env.TELEGRAM_BOT_TOKEN),
   telegramWebhookSecret: trim(process.env.TELEGRAM_WEBHOOK_SECRET),
+  // Used by the Content Studio /SCRIPT command (server/_core/anthropic.ts) and
+  // by the Telegram support bot. Separate from the NVIDIA/Forge provider above,
+  // which drives content.generate.
   anthropicApiKey: trim(process.env.ANTHROPIC_API_KEY),
+  // YouTube Data API v3 key for the /TRENDS command. A plain API key from
+  // Google Cloud Console — an OAuth client id/secret will not work here.
+  youtubeApiKey: trim(process.env.YOUTUBE_API_KEY),
   // Shown on the in-app support screen. Public contact details, not secrets.
   supportTelegramUsername: trim(process.env.EXPO_PUBLIC_SUPPORT_TELEGRAM),
   supportWhatsappNumber: trim(process.env.EXPO_PUBLIC_SUPPORT_WHATSAPP),
@@ -61,6 +67,7 @@ export function getRuntimeDiagnostics() {
     emailConfigured: Boolean(ENV.resendApiKey && ENV.emailFrom),
     telegramConfigured: Boolean(ENV.telegramBotToken && ENV.telegramWebhookSecret),
     anthropicConfigured: Boolean(ENV.anthropicApiKey),
+    youtubeConfigured: Boolean(ENV.youtubeApiKey),
     tiktokConfigured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid),
     tiktok: { configured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid), redirectValid: tiktokRedirectValid, missing: tiktokMissing },
   };

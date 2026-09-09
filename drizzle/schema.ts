@@ -191,7 +191,7 @@ export const contentItems = mysqlTable(
     workspaceId: int("workspaceId").notNull().references(() => workspaces.id),
     campaignId: int("campaignId").references(() => campaigns.id),
     goalId: int("goalId").references(() => goals.id),
-    type: mysqlEnum("type", ["image", "video", "copy", "social_post", "advertisement", "campaign", "email", "content_plan", "storyboard", "product_creative"]).notNull(),
+    type: mysqlEnum("type", ["image", "video", "copy", "social_post", "advertisement", "campaign", "email", "content_plan", "storyboard", "product_creative", "script"]).notNull(),
     platform: mysqlEnum("platform", ["tiktok", "instagram", "youtube", "facebook", "pinterest", "linkedin", "email", "website", "multi"]).notNull(),
     desiredOutcome: text("desiredOutcome").notNull(),
     offer: text("offer"),

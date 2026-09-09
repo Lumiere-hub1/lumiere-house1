@@ -1,0 +1,1 @@
+ALTER TABLE `content_items` MODIFY COLUMN `type` enum('image','video','copy','social_post','advertisement','campaign','email','content_plan','storyboard','product_creative','script') NOT NULL;
