@@ -15,12 +15,12 @@ export default function TabLayout() {
     <Tabs.Screen name="clients" options={{ title: "Clients", tabBarIcon: ({ color }) => <MaterialIcons name="people-outline" size={22} color={color} /> }} />
     <Tabs.Screen name="content" options={{ title: "Studio", tabBarIcon: ({ color }) => <MaterialIcons name="auto-awesome" size={22} color={color} /> }} />
     <Tabs.Screen name="settings" options={{ title: "Settings", tabBarIcon: ({ color }) => <MaterialIcons name="settings" size={22} color={color} /> }} />
-    {/* Still real, still fully navigable (linked from Settings) — just no
-        longer separate tab-bar destinations, to cut cognitive load per the
-        navigation restructure. */}
-    <Tabs.Screen name="growth" options={{ href: null }} />
-    <Tabs.Screen name="results" options={{ href: null }} />
-    <Tabs.Screen name="automate" options={{ href: null }} />
-    <Tabs.Screen name="connect" options={{ href: null }} />
+    {/* Growth, Results, Automate and Connect deliberately do NOT live here.
+        They were `href: null` tab screens, which kept them inside this
+        navigator: pushing to one was a tab switch, not a stack push, so the
+        back gesture returned to this navigator's anchor (Home) instead of the
+        screen the user came from. They are now top-level stack routes
+        (app/growth.tsx etc.), still reached from Settings, and back now
+        returns to Settings as expected. */}
   </Tabs>;
 }
