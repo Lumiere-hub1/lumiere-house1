@@ -2,5 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "express",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "rm -rf public .vercel-web-build && node scripts/ensure-nativewind-cache.mjs && pnpm exec expo export --platform web --output-dir .vercel-web-build && mkdir -p public && cp -a .vercel-web-build/. public/"
+  "buildCommand": "node scripts/migrate.mjs && rm -rf public .vercel-web-build && node scripts/ensure-nativewind-cache.mjs && pnpm exec expo export --platform web --output-dir .vercel-web-build && mkdir -p public && cp -a .vercel-web-build/. public/"
 }

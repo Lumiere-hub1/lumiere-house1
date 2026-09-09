@@ -41,7 +41,30 @@ function getRequestToken(req: { headers: Record<string, string | string[] | unde
 async function enforceTrpcRateLimit(ctx: { req: { headers: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } } }, bucket: string, subject: string, maxRequests: number, windowMs: number) {
   const forwarded = ctx.req.headers["x-forwarded-for"];
   const address = typeof forwarded === "string" ? forwarded.split(",")[0].trim() : ctx.req.socket?.remoteAddress || "unknown";
-  const result = await db.checkRateLimit({ bucket, identifier: `${address}:${subject.trim().toLowerCase()}`, maxRequests, windowMs });
+
+  // Only the database call is guarded. A failure here means the limiter itself
+  // is broken, which is an infrastructure fault, not a client error: without
+  // this the raw Drizzle error — full INSERT statement, column names and bound
+  // parameters — escaped tRPC and was rendered to the user as the failure
+  // message. Mirrors the logging and fail-closed behaviour of
+  // enforceRateLimit in server/_core/rate-limit.ts.
+  let result;
+  try {
+    result = await db.checkRateLimit({ bucket, identifier: `${address}:${subject.trim().toLowerCase()}`, maxRequests, windowMs });
+  } catch (error) {
+    const cause = error instanceof Error ? (error as { cause?: unknown }).cause : undefined;
+    console.error(JSON.stringify({
+      event: "rate_limit_error",
+      bucket,
+      error: error instanceof Error ? error.message : "unknown",
+      causeMessage: cause instanceof Error ? cause.message : cause ? String(cause) : undefined,
+      causeCode: cause && typeof cause === "object" && "code" in cause ? (cause as { code?: unknown }).code : undefined,
+    }));
+    // Fail closed. Falling through would let the request past an unenforced
+    // limiter, which is worse than refusing it.
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Request protection is temporarily unavailable. Please try again shortly." });
+  }
+
   if (!result.allowed) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests. Please try again later." });
 }
 
