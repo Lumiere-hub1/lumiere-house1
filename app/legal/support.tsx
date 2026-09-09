@@ -14,7 +14,16 @@ import { SUPPORT_CHANNELS } from "@/shared/support";
 export default function SupportScreen() {
   const { telegramUsername, whatsappNumber, email } = SUPPORT_CHANNELS;
 
-  return <ScreenShell title="Support" eyebrow="Lumière House" subtitle="Three ways to reach us. The Telegram bot answers instantly.">
+  // Describes what is actually on the page. A fixed "three ways to reach us"
+  // read as a broken promise wherever a channel was unconfigured — which is
+  // every environment that has not been given the public support variables.
+  const subtitle = telegramUsername
+    ? "The Telegram bot answers common questions instantly. A person picks up the rest."
+    : whatsappNumber
+      ? "Message us on WhatsApp, or email for anything needing a written record."
+      : "Email us and a person will pick it up.";
+
+  return <ScreenShell title="Support" eyebrow="Lumière House" subtitle={subtitle}>
     <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 40 }}>
       {telegramUsername ? (
         <Surface>
