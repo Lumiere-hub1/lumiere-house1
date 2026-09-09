@@ -11,6 +11,7 @@
  * process that stays alive, which a serverless deployment does not give us.
  */
 import type { Express, Request, Response } from "express";
+import { generatePlainText } from "./anthropic";
 import { ENV } from "./env";
 import { checkRateLimit } from "../db";
 
@@ -71,36 +72,18 @@ const HELP_TEXT = [
   "Never send a password, a payment card, or a verification code here.",
 ].join("\n");
 
-/** Answers with Claude. Returns null when unavailable, so the caller degrades rather than lying. */
+/**
+ * Answers with Claude. Returns null when unavailable, so the caller degrades
+ * rather than lying.
+ *
+ * Delegates to server/_core/anthropic.ts rather than calling the API directly:
+ * this used to POST to api.anthropic.com with an x-api-key header, which is
+ * the first-party shape only and would have gone quiet — with no error the
+ * user could see — as soon as the deployment moved to Amazon Bedrock.
+ */
 async function answerWithClaude(question: string): Promise<string | null> {
-  if (!ENV.anthropicApiKey) return null;
-  try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ENV.anthropicApiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-opus-5",
-        // A support answer is short. This is the cost ceiling per message.
-        max_tokens: 600,
-        system: SUPPORT_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: question }],
-      }),
-    });
-    if (!response.ok) {
-      console.error(JSON.stringify({ event: "telegram_claude_failed", status: response.status }));
-      return null;
-    }
-    const data = (await response.json()) as { content?: Array<{ type?: string; text?: string }> };
-    const text = (data.content ?? []).filter((part) => part.type === "text").map((part) => part.text ?? "").join("").trim();
-    return text || null;
-  } catch (error) {
-    console.error(JSON.stringify({ event: "telegram_claude_error", error: error instanceof Error ? error.message : "unknown" }));
-    return null;
-  }
+  // A support answer is short. This is the cost ceiling per message.
+  return generatePlainText({ system: SUPPORT_SYSTEM_PROMPT, prompt: question, maxTokens: 600 });
 }
 
 const FALLBACK_REPLY = "I couldn't answer that one automatically. A human from the Lumière team will follow up — you can also reach us by email from the Support screen in the app.";

@@ -28,7 +28,21 @@ export const ENV = {
   // Used by the Content Studio /SCRIPT command (server/_core/anthropic.ts) and
   // by the Telegram support bot. Separate from the NVIDIA/Forge provider above,
   // which drives content.generate.
+  //
+  // Two mutually exclusive ways to reach the same models. Set ONE of them:
+  //   ANTHROPIC_API_KEY        — Anthropic's own API. Key looks like "sk-ant-…".
+  //   AWS_BEARER_TOKEN_BEDROCK — Amazon Bedrock. Key looks like "ABSK…".
+  // Putting an ABSK key in ANTHROPIC_API_KEY does not work: api.anthropic.com
+  // rejects it, and the failure reads as a plain 401 with no hint of why.
   anthropicApiKey: trim(process.env.ANTHROPIC_API_KEY),
+  bedrock: {
+    apiKey: trim(process.env.AWS_BEARER_TOKEN_BEDROCK),
+    // BEDROCK_AWS_REGION is checked first on purpose. Vercel's Node runtime is
+    // Lambda underneath and sets AWS_REGION to wherever the function happens to
+    // run, which is not necessarily a region where Bedrock is enabled for the
+    // account. An explicit variable keeps that ambient value from deciding.
+    region: trim(process.env.BEDROCK_AWS_REGION) || trim(process.env.AWS_REGION) || trim(process.env.AWS_DEFAULT_REGION),
+  },
   // YouTube Data API v3 key for the /TRENDS command. A plain API key from
   // Google Cloud Console — an OAuth client id/secret will not work here.
   youtubeApiKey: trim(process.env.YOUTUBE_API_KEY),
@@ -66,7 +80,13 @@ export function getRuntimeDiagnostics() {
     forgeConfigured: Boolean(ENV.forgeApiUrl && ENV.forgeApiKey),
     emailConfigured: Boolean(ENV.resendApiKey && ENV.emailFrom),
     telegramConfigured: Boolean(ENV.telegramBotToken && ENV.telegramWebhookSecret),
-    anthropicConfigured: Boolean(ENV.anthropicApiKey),
+    // Computed here rather than imported from anthropic.ts, which imports ENV.
+    // Kept deliberately in step with resolveScriptProvider() in that module.
+    anthropicConfigured: Boolean((ENV.bedrock.apiKey && ENV.bedrock.region) || ENV.anthropicApiKey),
+    // Names the path in use, so a deployment that is answering from the wrong
+    // account — or has a Bedrock key but no region — is visible from the
+    // diagnostics endpoint instead of only from a failed generation.
+    scriptProvider: ENV.bedrock.apiKey ? (ENV.bedrock.region ? "bedrock" : "bedrock-missing-region") : ENV.anthropicApiKey ? "anthropic" : "none",
     youtubeConfigured: Boolean(ENV.youtubeApiKey),
     tiktokConfigured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid),
     tiktok: { configured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid), redirectValid: tiktokRedirectValid, missing: tiktokMissing },
