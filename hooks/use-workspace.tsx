@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/hooks/use-auth";
+import { selectActiveWorkspace } from "@/shared/workspace-selection";
 
 const ACTIVE_WORKSPACE_KEY = "lumiere.activeWorkspaceId";
 
@@ -41,9 +42,10 @@ export function useWorkspace() {
     await AsyncStorage.setItem(ACTIVE_WORKSPACE_KEY, String(workspaceId));
   }, []);
 
-  const workspace = useMemo(() => {
-    return (workspacesQuery.data || []).find((row) => row.workspace.id === activeWorkspaceId)?.workspace || null;
-  }, [workspacesQuery.data, activeWorkspaceId]);
+  const workspace = useMemo(
+    () => selectActiveWorkspace(workspacesQuery.data || [], activeWorkspaceId),
+    [workspacesQuery.data, activeWorkspaceId],
+  );
 
   return {
     workspace,

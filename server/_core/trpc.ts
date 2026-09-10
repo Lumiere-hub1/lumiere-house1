@@ -56,8 +56,15 @@ export const workspaceProcedure = protectedProcedure.use(
  * Gating onboarding would leave a new account unable to do anything at all,
  * which is the "block login entirely" behaviour under a different name; a user
  * whose verification email is delayed or lost would be stuck with no route
- * forward. They can look around and finish setup; they cannot burn API credits
- * or connect a third-party account until the address is confirmed.
+ * forward. They can look around, finish setup, and connect a platform account;
+ * they cannot burn API credits until the address is confirmed.
+ *
+ * Connecting is deliberately NOT gated. It spends nothing, it is the user
+ * authorizing us to their own account through the provider's own consent
+ * screen, and gating it would make a lost verification email block the one
+ * step a new account most needs to take. Keep this list and the wording in
+ * components/unverified-email-banner.tsx in agreement — they drifted once, and
+ * the banner told users connections were locked when they were not.
  */
 export const verifiedWorkspaceProcedure = workspaceProcedure.use(
   t.middleware(async (opts) => {
