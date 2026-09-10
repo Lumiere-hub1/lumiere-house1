@@ -51,7 +51,17 @@ export function useWorkspace() {
     workspace,
     workspaceId: activeWorkspaceId,
     workspaces: (workspacesQuery.data || []) as WorkspaceRow[],
-    loading: workspacesQuery.isLoading,
+    // isPending, not isLoading. isLoading is `isPending && isFetching`, and on
+    // the render where `enabled` flips true the fetch has been scheduled but
+    // not started — so isFetching is false and isLoading reports false while
+    // there is still no data. "/" reads that as a settled "no workspace" and
+    // redirects to onboarding before the request it is waiting on has even
+    // left the browser. isPending stays true until the query actually resolves.
+    //
+    // A disabled query is pending forever, which is correct here only because
+    // every consumer gates on isAuthenticated first (see app/index.tsx); do not
+    // consume this without that guard.
+    loading: workspacesQuery.isPending,
     error: workspacesQuery.error,
     refresh: workspacesQuery.refetch,
     switchWorkspace,
