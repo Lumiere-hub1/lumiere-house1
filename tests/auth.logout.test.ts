@@ -53,10 +53,15 @@ describe("auth.logout", () => {
     expect(result).toEqual({ success: true });
     expect(clearedCookies).toHaveLength(1);
     expect(clearedCookies[0]?.name).toBe(COOKIE_NAME);
+    // The clearing cookie must carry the SAME attributes as the one that was
+    // set, or the browser treats it as a different cookie and leaves the real
+    // one in place. So this tracks getSessionCookieOptions deliberately:
+    // sameSite is "lax" now, not "none". maxAge is the one field logout
+    // overrides, to -1, which is what expires it.
     expect(clearedCookies[0]?.options).toMatchObject({
       maxAge: -1,
       secure: true,
-      sameSite: "none",
+      sameSite: "lax",
       httpOnly: true,
       path: "/",
     });

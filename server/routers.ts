@@ -11,7 +11,7 @@ import { buildAppUrl } from "./_core/app-url";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { sendVerificationEmail } from "./_core/email";
 import { ENV, getRuntimeDiagnostics } from "./_core/env";
-import { TIKTOK_REVOKE_URL } from "./_core/tiktokOAuth";
+import { TIKTOK_REVOKE_URL, buildTikTokAuthorizeUrl } from "./_core/tiktokOAuth";
 import { adminProcedure, protectedProcedure, publicProcedure, router, verifiedWorkspaceProcedure, workspaceProcedure } from "./_core/trpc";
 import { systemRouter } from "./_core/systemRouter";
 import * as db from "./db";
@@ -44,9 +44,11 @@ function publicUser(user: UserLike) {
  * cannot. Shared by connectors.connect and connectors.retry, which are the
  * same action and must not disagree about which providers are supported.
  *
- * The returned URL is absolute. It used to be the relative path
- * "/api/oauth/tiktok/start?..." which only ever worked on web — on iOS and
- * Android the screen calls Linking.openURL, which cannot open a bare path.
+ * The returned URL is absolute and points at the provider directly. It used to
+ * be the relative path "/api/oauth/tiktok/start?...", which failed twice over:
+ * Linking.openURL cannot open a bare path on iOS or Android, and on web it
+ * sent the browser through one of our own authenticated routes, which a
+ * navigation can only reach with a cookie.
  */
 async function startProviderAuthorization(
   ctx: { req: { protocol?: string; get?: (name: string) => string | undefined; headers: Record<string, string | string[] | undefined> }; user: { id: number } },
@@ -61,7 +63,17 @@ async function startProviderAuthorization(
       await db.recordConnectorAttempt({ workspaceId, userId: ctx.user.id, provider, outcome: "authorization_required", message });
       throw new TRPCError({ code: "PRECONDITION_FAILED", message });
     }
-    return { redirectUrl: buildAppUrl(ctx.req, `/api/oauth/tiktok/start?workspaceId=${workspaceId}`) };
+    // Straight to TikTok, not via our own /api/oauth/tiktok/start.
+    //
+    // This mutation is reached over tRPC, which authenticates with a bearer
+    // token, so it always knows who is asking. The screen then navigates the
+    // browser to whatever URL we return — and a navigation carries only
+    // cookies. Pointing it at our own authenticated route made the flow depend
+    // on the session cookie still being present, and when it was not the user
+    // was thrown out with "Not authenticated" while the rest of the app
+    // considered them signed in. Returning TikTok's URL removes the hop, and
+    // the dependency with it. The state is still minted and signed server-side.
+    return { redirectUrl: buildTikTokAuthorizeUrl(workspaceId) };
   }
   const message = `Official OAuth for ${provider} is not configured in this environment. No connector was connected.`;
   await db.recordConnectorAttempt({ workspaceId, userId: ctx.user.id, provider, outcome: "authorization_required", message });

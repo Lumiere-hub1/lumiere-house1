@@ -35,6 +35,33 @@ function signState(payload: string): string {
   return Buffer.from(`${payload}.${sig}`).toString("base64url");
 }
 
+/**
+ * The URL that sends a browser to TikTok's authorization screen.
+ *
+ * Exported so connectors.connect can hand it straight to the client. That
+ * matters: the client reaches tRPC with an Authorization header, but a
+ * `window.location.href` navigation carries only cookies. Routing the button
+ * through our own /api/oauth/tiktok/start meant the flow depended on the
+ * session cookie surviving, and when it did not the user was bounced with
+ * "Not authenticated" while being, by every other measure, logged in.
+ *
+ * Going straight to TikTok removes that hop and the dependency with it. The
+ * state is still minted and signed here, on the server, by the same code the
+ * callback verifies against.
+ */
+export function buildTikTokAuthorizeUrl(workspaceId: number): string {
+  if (!ENV.tiktok.clientKey || !ENV.tiktok.redirectUri) {
+    throw new Error("TikTok Login Kit is not configured.");
+  }
+  const url = new URL(TIKTOK_AUTH_URL);
+  url.searchParams.set("client_key", ENV.tiktok.clientKey);
+  url.searchParams.set("redirect_uri", ENV.tiktok.redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", ENV.tiktok.scopes || "user.info.basic");
+  url.searchParams.set("state", signState(`${workspaceId}:${Date.now()}`));
+  return url.toString();
+}
+
 function verifyState(state: string): { workspaceId: number } | null {
   try {
     const decoded = Buffer.from(state, "base64url").toString("utf8");
@@ -92,14 +119,7 @@ export function registerTikTokOAuthRoutes(app: Express) {
       res.redirect(302, connectScreenUrl(req, { tiktok: "error", reason: "signed_out" }));
       return;
     }
-    const state = signState(`${workspaceId}:${Date.now()}`);
-    const url = new URL(TIKTOK_AUTH_URL);
-    url.searchParams.set("client_key", ENV.tiktok.clientKey);
-    url.searchParams.set("redirect_uri", ENV.tiktok.redirectUri);
-    url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", ENV.tiktok.scopes || "user.info.basic");
-    url.searchParams.set("state", state);
-    res.redirect(302, url.toString());
+    res.redirect(302, buildTikTokAuthorizeUrl(workspaceId));
   });
 
   app.get("/api/oauth/tiktok/callback", async (req: Request, res: Response) => {

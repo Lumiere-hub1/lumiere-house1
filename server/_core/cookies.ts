@@ -79,19 +79,39 @@ export function isPublicSuffixDomain(hostname: string): boolean {
   return PUBLIC_SUFFIXES.has(parts.slice(-2).join("."));
 }
 
+/**
+ * How long a session cookie survives. Matches the 30 days that
+ * db.createSession gives the session row it points at, so the cookie and the
+ * server-side session expire together rather than one outliving the other.
+ */
+export const SESSION_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 export function getSessionCookieOptions(
   req: Request,
-): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure"> {
+): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure" | "maxAge"> {
   const secure = isSecureRequest(req);
+  const crossOrigin = Boolean(process.env.SESSION_COOKIE_DOMAIN?.trim());
 
   return {
     domain: getCookieDomain(req.hostname),
     httpOnly: true,
     path: "/",
-    // SameSite=None requires Secure; browsers reject the pair without it, which
-    // would break local http development the same way the domain broke
-    // production. Lax is the correct same-origin default anyway.
-    sameSite: secure ? "none" : "lax",
+    // Without maxAge this is a SESSION cookie: the browser discards it when it
+    // closes. The client also keeps a bearer token in AsyncStorage, which does
+    // NOT expire, so every tRPC call kept working and the app kept showing the
+    // user as signed in — while any plain navigation to an authenticated route
+    // arrived with no credential at all. That is what "Not authenticated" on
+    // Connect TikTok was: a browser restart, not a logged-out user. The
+    // OAuth-login path in oauth.ts always set maxAge; these two did not.
+    maxAge: SESSION_COOKIE_MAX_AGE_MS,
+    // Lax, not None. The app and the API share an origin, so None buys nothing
+    // and costs something: it marks the cookie as third-party-capable, which
+    // browsers with third-party cookie restrictions treat far more harshly.
+    // Lax is still sent on top-level GET navigations — including TikTok's
+    // redirect back to our callback — which is exactly what this flow needs.
+    // None is reserved for the genuinely cross-origin deployment, which is
+    // opt-in through SESSION_COOKIE_DOMAIN and requires Secure to be accepted.
+    sameSite: crossOrigin && secure ? "none" : "lax",
     secure,
   };
 }
