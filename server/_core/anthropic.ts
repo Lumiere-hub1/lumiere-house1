@@ -11,13 +11,19 @@
  * bundle. The router returns only the finished script fields — never the
  * system prompt, the user-facing envelope, or raw model metadata.
  */
+import { AnthropicBedrockMantle } from "@anthropic-ai/bedrock-sdk";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
 import { ENV } from "./env";
 
-/** Model is pinned rather than configurable so output stays consistent per workspace. */
+/**
+ * Model is pinned rather than configurable so output stays consistent per
+ * workspace. Bedrock namespaces the same model behind an `anthropic.` prefix;
+ * everything else about the request is identical, which is why one code path
+ * serves both providers.
+ */
 const SCRIPT_MODEL = "claude-opus-5";
 
 /**
@@ -63,17 +69,69 @@ const SCRIPT_SYSTEM_PROMPT = [
   "- Write in second person to the viewer. Warm, direct, and plain. No hype and no exclamation marks.",
 ].join("\n");
 
-let cachedClient: Anthropic | null = null;
-
 /** Thrown when a generation cannot proceed; the router converts it to a tRPC error. */
 export class AnthropicUnavailableError extends Error {}
 
-function getClient(): Anthropic {
-  if (!ENV.anthropicApiKey) {
-    throw new AnthropicUnavailableError("The script engine is not configured. Set ANTHROPIC_API_KEY on the server.");
+/**
+ * Which of the two ways of reaching Claude this deployment is configured for.
+ *
+ * - "bedrock"   — Amazon Bedrock, billed to an AWS account. Authenticates with
+ *                 a Bedrock API key (the "ABSK…" string AWS issues) sent as a
+ *                 bearer token against bedrock-mantle.<region>.api.aws.
+ * - "anthropic" — Anthropic's own API, billed to an Anthropic account.
+ *                 Authenticates with an "sk-ant-…" key.
+ *
+ * The two credentials are NOT interchangeable: an ABSK key in ANTHROPIC_API_KEY
+ * is rejected by api.anthropic.com, and an sk-ant- key is rejected by Bedrock.
+ * Bedrock wins when configured, because a deployment that has gone to the
+ * trouble of setting AWS credentials means to spend the AWS balance.
+ */
+export type ScriptProvider = "bedrock" | "anthropic" | "none";
+
+export function resolveScriptProvider(): ScriptProvider {
+  if (ENV.bedrock.apiKey) return "bedrock";
+  if (ENV.anthropicApiKey) return "anthropic";
+  return "none";
+}
+
+/** Bedrock namespaces Anthropic's models; the first-party API does not. */
+function modelFor(provider: ScriptProvider): string {
+  return provider === "bedrock" ? `anthropic.${SCRIPT_MODEL}` : SCRIPT_MODEL;
+}
+
+/**
+ * Both clients extend the same base and expose the same `messages` resource, so
+ * the request-building code below is written once and does not branch.
+ */
+type ScriptClient = Anthropic | AnthropicBedrockMantle;
+
+let cachedClient: ScriptClient | null = null;
+
+function getClient(): ScriptClient {
+  if (cachedClient) return cachedClient;
+
+  const provider = resolveScriptProvider();
+  if (provider === "bedrock") {
+    if (!ENV.bedrock.region) {
+      // Bedrock is regional and the SDK has no default, so a missing region
+      // would otherwise surface as an unresolvable hostname mid-request.
+      throw new AnthropicUnavailableError("The script engine has a Bedrock key but no region. Set BEDROCK_AWS_REGION on the server (for example us-east-1).");
+    }
+    cachedClient = new AnthropicBedrockMantle({ apiKey: ENV.bedrock.apiKey, awsRegion: ENV.bedrock.region });
+    return cachedClient;
   }
-  if (!cachedClient) cachedClient = new Anthropic({ apiKey: ENV.anthropicApiKey });
-  return cachedClient;
+
+  if (provider === "anthropic") {
+    cachedClient = new Anthropic({ apiKey: ENV.anthropicApiKey });
+    return cachedClient;
+  }
+
+  throw new AnthropicUnavailableError("The script engine is not configured. Set either AWS_BEARER_TOKEN_BEDROCK and BEDROCK_AWS_REGION (Amazon Bedrock) or ANTHROPIC_API_KEY (Anthropic's own API) on the server.");
+}
+
+/** Names the variable an operator should actually look at when auth fails. */
+function credentialHint(provider: ScriptProvider): string {
+  return provider === "bedrock" ? "AWS_BEARER_TOKEN_BEDROCK" : "ANTHROPIC_API_KEY";
 }
 
 export type ScriptRequest = {
@@ -89,6 +147,7 @@ export type ScriptRequest = {
  * never sees the prompt or the raw response.
  */
 export async function generateScript(request: ScriptRequest): Promise<GeneratedScript> {
+  const provider = resolveScriptProvider();
   const client = getClient();
 
   // Business context is optional — a workspace may not have completed setup.
@@ -104,7 +163,7 @@ export async function generateScript(request: ScriptRequest): Promise<GeneratedS
   let response;
   try {
     response = await client.messages.parse({
-      model: SCRIPT_MODEL,
+      model: modelFor(provider),
       max_tokens: SCRIPT_MAX_TOKENS,
       // Creative writing of this length does not repay deep reasoning; medium
       // keeps quality while holding token spend down on a per-client app.
@@ -119,7 +178,7 @@ export async function generateScript(request: ScriptRequest): Promise<GeneratedS
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
-      throw new AnthropicUnavailableError("The script engine rejected its API key. Check ANTHROPIC_API_KEY on the server.");
+      throw new AnthropicUnavailableError(`The script engine rejected its API key. Check ${credentialHint(provider)} on the server.`);
     }
     if (error instanceof Anthropic.RateLimitError) {
       throw new AnthropicUnavailableError("The script engine is rate limited right now. Try again in a moment.");
@@ -140,7 +199,46 @@ export async function generateScript(request: ScriptRequest): Promise<GeneratedS
   return response.parsed_output;
 }
 
+/**
+ * One short plain-text answer, no structured output. Used by the Telegram
+ * support bot, which previously hand-rolled a fetch to api.anthropic.com with
+ * an x-api-key header — a shape that only ever works on the first-party path
+ * and would have silently stopped answering the moment this deployment moved
+ * to Bedrock. Routing it through the same client keeps one provider decision
+ * in one place.
+ *
+ * Returns null rather than throwing: a support bot that cannot reach Claude
+ * should fall back to its canned reply, not drop the message.
+ */
+export async function generatePlainText(options: { system: string; prompt: string; maxTokens: number }): Promise<string | null> {
+  const provider = resolveScriptProvider();
+  if (provider === "none") return null;
+
+  try {
+    const response = await getClient().messages.create({
+      model: modelFor(provider),
+      max_tokens: options.maxTokens,
+      system: options.system,
+      messages: [{ role: "user", content: options.prompt }],
+    });
+    const text = response.content
+      .filter((block): block is Extract<typeof block, { type: "text" }> => block.type === "text")
+      .map((block) => block.text)
+      .join("")
+      .trim();
+    return text || null;
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "claude_plain_text_failed",
+      provider,
+      status: error instanceof Anthropic.APIError ? error.status : undefined,
+      error: error instanceof Error ? error.message : "unknown",
+    }));
+    return null;
+  }
+}
+
 /** Surfaced through the existing runtime diagnostics endpoint. */
 export function isAnthropicConfigured(): boolean {
-  return Boolean(ENV.anthropicApiKey);
+  return resolveScriptProvider() !== "none";
 }
