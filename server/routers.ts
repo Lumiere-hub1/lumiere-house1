@@ -7,9 +7,11 @@ import { STUDIO_TOPIC_MAX, isStudioCommandRejected, parseStudioCommand } from ".
 import { AnthropicUnavailableError, generateScript } from "./_core/anthropic";
 import { YouTubeUnavailableError, fetchTrendingVideos } from "./_core/youtube";
 import { invokeLLM } from "./_core/llm";
+import { buildAppUrl } from "./_core/app-url";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { sendVerificationEmail } from "./_core/email";
-import { ENV } from "./_core/env";
+import { ENV, getRuntimeDiagnostics } from "./_core/env";
+import { TIKTOK_REVOKE_URL, buildTikTokAuthorizeUrl } from "./_core/tiktokOAuth";
 import { adminProcedure, protectedProcedure, publicProcedure, router, verifiedWorkspaceProcedure, workspaceProcedure } from "./_core/trpc";
 import { systemRouter } from "./_core/systemRouter";
 import * as db from "./db";
@@ -38,18 +40,44 @@ function publicUser(user: UserLike) {
 }
 
 /**
- * Absolute URL for a link the user will follow from outside the app (an email).
- * Prefers APP_BASE_URL so the link is stable regardless of which host served
- * the request, and falls back to the request's own origin so local development
- * and preview deployments work with no configuration.
+ * Begins an OAuth authorization for a provider, or explains truthfully why it
+ * cannot. Shared by connectors.connect and connectors.retry, which are the
+ * same action and must not disagree about which providers are supported.
+ *
+ * The returned URL is absolute and points at the provider directly. It used to
+ * be the relative path "/api/oauth/tiktok/start?...", which failed twice over:
+ * Linking.openURL cannot open a bare path on iOS or Android, and on web it
+ * sent the browser through one of our own authenticated routes, which a
+ * navigation can only reach with a cookie.
  */
-function buildAppUrl(req: { protocol: string; get?: (name: string) => string | undefined; headers: Record<string, string | string[] | undefined> }, path: string) {
-  if (ENV.appBaseUrl) return `${ENV.appBaseUrl.replace(/\/$/, "")}${path}`;
-  const forwardedHost = req.headers["x-forwarded-host"];
-  const host = (typeof forwardedHost === "string" ? forwardedHost.split(",")[0].trim() : undefined) || req.get?.("host") || (typeof req.headers.host === "string" ? req.headers.host : "");
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  const protocol = (typeof forwardedProto === "string" ? forwardedProto.split(",")[0].trim() : undefined) || req.protocol || "https";
-  return `${protocol}://${host}${path}`;
+async function startProviderAuthorization(
+  ctx: { req: { protocol?: string; get?: (name: string) => string | undefined; headers: Record<string, string | string[] | undefined> }; user: { id: number } },
+  workspaceId: number,
+  provider: string,
+) {
+  if (provider === "tiktok") {
+    const diagnostics = getRuntimeDiagnostics();
+    if (!diagnostics.tiktokConfigured) {
+      const missing = diagnostics.tiktok.missing.length ? ` Missing: ${diagnostics.tiktok.missing.join(", ")}.` : " The configured redirect URI is not a valid https URL.";
+      const message = `TikTok is not configured on this server, so authorization cannot start.${missing}`;
+      await db.recordConnectorAttempt({ workspaceId, userId: ctx.user.id, provider, outcome: "authorization_required", message });
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message });
+    }
+    // Straight to TikTok, not via our own /api/oauth/tiktok/start.
+    //
+    // This mutation is reached over tRPC, which authenticates with a bearer
+    // token, so it always knows who is asking. The screen then navigates the
+    // browser to whatever URL we return — and a navigation carries only
+    // cookies. Pointing it at our own authenticated route made the flow depend
+    // on the session cookie still being present, and when it was not the user
+    // was thrown out with "Not authenticated" while the rest of the app
+    // considered them signed in. Returning TikTok's URL removes the hop, and
+    // the dependency with it. The state is still minted and signed server-side.
+    return { redirectUrl: buildTikTokAuthorizeUrl(workspaceId) };
+  }
+  const message = `Official OAuth for ${provider} is not configured in this environment. No connector was connected.`;
+  await db.recordConnectorAttempt({ workspaceId, userId: ctx.user.id, provider, outcome: "authorization_required", message });
+  throw new TRPCError({ code: "PRECONDITION_FAILED", message });
 }
 
 function getRequestToken(req: { headers: Record<string, string | string[] | undefined> }) {
@@ -490,8 +518,48 @@ export const appRouter = router({
   }),
   connectors: router({
     list: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive() })).query(async ({ ctx, input }) => { await workspaceAccess(ctx.user.id, input.workspaceId); return db.listConnectors(input.workspaceId); }),
-    connect: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), provider: z.string().min(2).max(120) })).mutation(async ({ ctx, input }) => { await workspaceAccess(ctx.user.id, input.workspaceId, ["owner", "admin"]); if (input.provider === "tiktok") { return { redirectUrl: `/api/oauth/tiktok/start?workspaceId=${input.workspaceId}` }; } const message = `Official OAuth for ${input.provider} is not configured in this environment. No connector was connected.`; await db.recordConnectorAttempt({ workspaceId: input.workspaceId, userId: ctx.user.id, provider: input.provider, outcome: "authorization_required", message }); throw new TRPCError({ code: "PRECONDITION_FAILED", message }); }),
-    retry: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), provider: z.string().min(2).max(120) })).mutation(async ({ ctx, input }) => { await workspaceAccess(ctx.user.id, input.workspaceId, ["owner", "admin"]); const message = `Authorization retry for ${input.provider} is waiting for the provider credentials and approved redirect URI. No connector was connected.`; await db.recordConnectorAttempt({ workspaceId: input.workspaceId, userId: ctx.user.id, provider: input.provider, outcome: "authorization_required", message }); throw new TRPCError({ code: "PRECONDITION_FAILED", message }); }),
+    connect: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), provider: z.string().min(2).max(120) })).mutation(async ({ ctx, input }) => {
+      await workspaceAccess(ctx.user.id, input.workspaceId, ["owner", "admin"]);
+      return startProviderAuthorization(ctx, input.workspaceId, input.provider);
+    }),
+    /**
+     * Retry is the same action as connect. It used to throw unconditionally,
+     * including for TikTok — so once a connection was dropped or errored, the
+     * button the UI showed ("Retry authorization") could never succeed. That
+     * is precisely the path a reviewer walks: connect, disconnect, reconnect.
+     */
+    retry: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), provider: z.string().min(2).max(120) })).mutation(async ({ ctx, input }) => {
+      await workspaceAccess(ctx.user.id, input.workspaceId, ["owner", "admin"]);
+      return startProviderAuthorization(ctx, input.workspaceId, input.provider);
+    }),
+    disconnect: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive(), provider: z.string().min(2).max(120) })).mutation(async ({ ctx, input }) => {
+      await enforceTrpcRateLimit(ctx, "connectors.disconnect", `user:${ctx.user.id}:workspace:${input.workspaceId}`, 20, 10 * 60 * 1000);
+      await workspaceAccess(ctx.user.id, input.workspaceId, ["owner", "admin"]);
+
+      // Delete our copy first. If revocation then fails, the user is still
+      // disconnected here — the alternative leaves a token we told them we had
+      // deleted. TikTok's token expires on its own; a stale row would not.
+      const { revocableToken } = await db.clearConnectorConnection(input.workspaceId, input.provider);
+
+      let revoked = false;
+      if (input.provider === "tiktok" && revocableToken && ENV.tiktok.clientKey && ENV.tiktok.clientSecret) {
+        try {
+          const response = await fetch(TIKTOK_REVOKE_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", "Cache-Control": "no-cache" },
+            body: new URLSearchParams({ client_key: ENV.tiktok.clientKey, client_secret: ENV.tiktok.clientSecret, token: revocableToken }),
+          });
+          revoked = response.ok;
+          if (!response.ok) console.error(JSON.stringify({ event: "tiktok_revoke_failed", status: response.status }));
+        } catch (error) {
+          console.error(JSON.stringify({ event: "tiktok_revoke_error", error: error instanceof Error ? error.message : "unknown" }));
+        }
+      }
+
+      // Reported honestly: "disconnected here" and "revoked at TikTok" are
+      // different facts and the UI says which one happened.
+      return { disconnected: true, revokedWithProvider: revoked };
+    }),
   }),
   analytics: router({
     list: workspaceProcedure.input(z.object({ workspaceId: z.number().int().positive() })).query(async ({ ctx, input }) => { await workspaceAccess(ctx.user.id, input.workspaceId); return db.listAnalytics(input.workspaceId); }),
