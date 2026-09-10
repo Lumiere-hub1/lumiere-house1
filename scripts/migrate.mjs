@@ -56,9 +56,32 @@ async function main() {
   });
 
   try {
-    console.log(`[migrate] Applying pending migrations to ${parsed.hostname}/${parsed.pathname.replace(/^\//, "")}`);
+    console.log(`[migrate] Checking ${parsed.hostname}/${parsed.pathname.replace(/^\//, "")}`);
+
+    // Count the ledger before and after so the log says what actually
+    // happened. drizzle's migrate() returns nothing and is silent when there
+    // is no work, so a bare "up to date" afterwards could not distinguish
+    // "applied three migrations" from "did nothing" — which is precisely the
+    // question you have during a deploy that is supposed to change the schema.
+    const applied = async () => {
+      try {
+        const [rows] = await connection.query("SELECT COUNT(*) AS n FROM `__drizzle_migrations`");
+        return Number(rows?.[0]?.n ?? 0);
+      } catch {
+        // The table does not exist until the first migration runs.
+        return 0;
+      }
+    };
+
+    const before = await applied();
     await migrate(drizzle(connection), { migrationsFolder });
-    console.log("[migrate] Database is up to date.");
+    const after = await applied();
+
+    if (after > before) {
+      console.log(`[migrate] Applied ${after - before} migration(s). Ledger now at ${after}.`);
+    } else {
+      console.log(`[migrate] No pending migrations. Ledger at ${after}.`);
+    }
   } finally {
     await connection.end();
   }
