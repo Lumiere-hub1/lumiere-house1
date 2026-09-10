@@ -51,8 +51,9 @@ export default function SupportScreen() {
             <Text style={{ color: brand.muted, fontSize: 13, lineHeight: 19 }}>Message us directly. Replies come from a person, during working hours.</Text>
             <SecondaryButton
               label="Open WhatsApp"
-              // wa.me wants digits only — no +, spaces, or dashes.
-              onPress={() => Linking.openURL(`https://wa.me/${whatsappNumber.replace(/[^0-9]/g, "")}`)}
+              // Already digits only — normaliseWhatsappNumber handles the
+              // "+1 742-…" and full-wa.me-link forms in shared/support.ts.
+              onPress={() => Linking.openURL(`https://wa.me/${whatsappNumber}`)}
               icon="chat-bubble-outline"
             />
           </View>
