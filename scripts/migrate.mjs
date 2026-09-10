@@ -45,13 +45,17 @@ async function main() {
   // Mirrors server/db.ts: mysql2 ignores "ssl-mode=REQUIRED" in the URI, so
   // hosts like Aiven that require TLS need an explicit ssl option.
   const parsed = new URL(databaseUrl);
+  // ...and, like server/db.ts, skips TLS for loopback only. A local MySQL has
+  // no certificate, so requiring TLS there fails the handshake outright and
+  // `pnpm db:migrate` could never be run against a development database.
+  const isLoopback = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname);
   const connection = await mysql.createConnection({
     host: parsed.hostname,
     port: parsed.port ? Number(parsed.port) : 3306,
     user: decodeURIComponent(parsed.username),
     password: decodeURIComponent(parsed.password),
     database: parsed.pathname.replace(/^\//, ""),
-    ssl: { rejectUnauthorized: false },
+    ssl: isLoopback ? undefined : { rejectUnauthorized: false },
     multipleStatements: true,
   });
 

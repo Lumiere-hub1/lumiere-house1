@@ -340,6 +340,40 @@ export const connectors = mysqlTable(
   }),
 );
 
+/**
+ * OAuth tokens for connected third-party accounts.
+ *
+ * Deliberately a separate table from `connectors` rather than another key in
+ * its `metadata` JSON. `connectors` rows are read and returned to the client
+ * by connectors.list; keeping credentials out of that table means a token
+ * cannot reach the browser through a careless `select *`, which is exactly the
+ * mistake this shape makes impossible rather than merely discouraged.
+ *
+ * accessToken and refreshToken hold AES-256-GCM ciphertext — see
+ * server/_core/secrets.ts. The expiry columns are plaintext on purpose: the UI
+ * needs to say "reauthorization needed" without decrypting anything.
+ */
+export const connectorCredentials = mysqlTable(
+  "connector_credentials",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    workspaceId: int("workspaceId").notNull().references(() => workspaces.id),
+    provider: varchar("provider", { length: 120 }).notNull(),
+    /** Provider's stable id for the account. Not a secret; used to detect account switches. */
+    externalAccountId: varchar("externalAccountId", { length: 255 }),
+    accessToken: text("accessToken").notNull(),
+    refreshToken: text("refreshToken"),
+    accessTokenExpiresAt: timestamp("accessTokenExpiresAt"),
+    refreshTokenExpiresAt: timestamp("refreshTokenExpiresAt"),
+    scopes: json("scopes"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (table) => ({
+    providerIdx: uniqueIndex("connector_credentials_workspace_provider_idx").on(table.workspaceId, table.provider),
+  }),
+);
+
 export const analyticsEvents = mysqlTable(
   "analytics_events",
   {
@@ -624,6 +658,7 @@ export type Approval = typeof approvals.$inferSelect;
 export type Client = typeof clients.$inferSelect;
 export type Automation = typeof automations.$inferSelect;
 export type Connector = typeof connectors.$inferSelect;
+export type ConnectorCredential = typeof connectorCredentials.$inferSelect;
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type PerformanceImport = typeof performanceImports.$inferSelect;
 export type Schedule = typeof schedules.$inferSelect;

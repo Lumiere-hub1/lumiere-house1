@@ -12,6 +12,7 @@ import {
   businesses,
   campaigns,
   clients,
+  connectorCredentials,
   connectors,
   contentItems,
   contentRevisions,
@@ -37,6 +38,7 @@ import {
   type InsertUser,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { decryptSecret, encryptSecret } from "./_core/secrets";
 import { createOpaqueToken, hashOpaqueToken } from "./password";
 import { isWithinQuietHours } from "./validation";
 import { comparePeriods, summarizeCampaignEvents } from "../shared/results";
@@ -47,6 +49,11 @@ import { comparePeriods, summarizeCampaignEvents } from "../shared/results";
 // mysql2/promise's pool type here (inferred via this helper) keeps drizzle's
 // return type consistent, rather than mixing it with the callback-style pool
 // type that drizzle(connectionString) infers internally.
+/** Shared with scripts/migrate.mjs, which applies the same rule for the same reason. */
+export function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+}
+
 function createDbConnection(databaseUrl: string) {
   // Parse the connection string into explicit fields rather than passing
   // { uri } alongside extra options: mysql2's merge behavior for a "uri" key
@@ -61,7 +68,13 @@ function createDbConnection(databaseUrl: string) {
     user: decodeURIComponent(parsed.username),
     password: decodeURIComponent(parsed.password),
     database: parsed.pathname.replace(/^\//, ""),
-    ssl: { rejectUnauthorized: false },
+    // TLS everywhere except loopback. A local MySQL started for development or
+    // a test run has no certificate, and requiring TLS there fails the
+    // handshake outright with HANDSHAKE_NO_SSL_SUPPORT — which meant the app
+    // could not be run against a local database at all. Loopback traffic never
+    // leaves the machine, so there is no transport to protect; every other
+    // host, Aiven included, still gets TLS.
+    ssl: isLoopbackHost(parsed.hostname) ? undefined : { rejectUnauthorized: false },
   });
   return drizzle(pool);
 }
@@ -678,10 +691,141 @@ export async function createAutomationRun(input: { workspaceId: number; automati
   return db.select().from(automationRuns).where(eq(automationRuns.id, Number(result[0]?.insertId))).limit(1).then((rows) => rows[0]);
 }
 
+/**
+ * Explicit column list rather than `select()`. These rows go straight to the
+ * client through connectors.list, so naming every column means a future column
+ * cannot become a leak by being added — it has to be added here too, which is
+ * the moment to think about whether the browser should see it.
+ */
 export async function listConnectors(workspaceId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(connectors).where(eq(connectors.workspaceId, workspaceId)).orderBy(connectors.provider);
+  return db
+    .select({
+      id: connectors.id,
+      workspaceId: connectors.workspaceId,
+      provider: connectors.provider,
+      status: connectors.status,
+      scopes: connectors.scopes,
+      metadata: connectors.metadata,
+      connectedAt: connectors.connectedAt,
+      createdAt: connectors.createdAt,
+      updatedAt: connectors.updatedAt,
+    })
+    .from(connectors)
+    .where(eq(connectors.workspaceId, workspaceId))
+    .orderBy(connectors.provider);
+}
+
+/**
+ * Records a completed authorization: the connector row flips to "connected"
+ * with display-only metadata, and the tokens go to the separate credentials
+ * table. Both happen or neither does — a "connected" badge with no usable
+ * token is exactly the lie this feature is meant not to tell.
+ */
+export async function saveConnectorConnection(input: {
+  workspaceId: number;
+  provider: string;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  externalAccountId?: string | null;
+  scopes: string[];
+  accessToken: string;
+  refreshToken?: string | null;
+  accessTokenExpiresAt?: Date | null;
+  refreshTokenExpiresAt?: Date | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available. Configure DATABASE_URL before using this operation.");
+
+  // Encrypt before opening the transaction: a missing JWT_SECRET should abort
+  // before anything is written, not leave a half-connected row behind.
+  const accessToken = encryptSecret(input.accessToken);
+  const refreshToken = input.refreshToken ? encryptSecret(input.refreshToken) : null;
+
+  const metadata = {
+    displayName: input.displayName ?? null,
+    avatarUrl: input.avatarUrl ?? null,
+    externalAccountId: input.externalAccountId ?? null,
+    connectedAt: new Date().toISOString(),
+  };
+
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(connectors)
+      .values({ workspaceId: input.workspaceId, provider: input.provider, status: "connected", scopes: input.scopes, metadata, connectedAt: new Date() })
+      .onDuplicateKeyUpdate({ set: { status: "connected", scopes: input.scopes, metadata, connectedAt: new Date() } });
+
+    await tx
+      .insert(connectorCredentials)
+      .values({
+        workspaceId: input.workspaceId,
+        provider: input.provider,
+        externalAccountId: input.externalAccountId ?? null,
+        accessToken,
+        refreshToken,
+        accessTokenExpiresAt: input.accessTokenExpiresAt ?? null,
+        refreshTokenExpiresAt: input.refreshTokenExpiresAt ?? null,
+        scopes: input.scopes,
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          externalAccountId: input.externalAccountId ?? null,
+          accessToken,
+          refreshToken,
+          accessTokenExpiresAt: input.accessTokenExpiresAt ?? null,
+          refreshTokenExpiresAt: input.refreshTokenExpiresAt ?? null,
+          scopes: input.scopes,
+        },
+      });
+  });
+}
+
+/**
+ * Returns the decrypted access token, or null when there is nothing usable —
+ * no row, an expired token, or ciphertext that will not decrypt because
+ * JWT_SECRET was rotated. Callers treat all three the same way: reauthorize.
+ */
+export async function getConnectorAccessToken(workspaceId: number, provider: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(connectorCredentials)
+    .where(and(eq(connectorCredentials.workspaceId, workspaceId), eq(connectorCredentials.provider, provider)))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  if (row.accessTokenExpiresAt && row.accessTokenExpiresAt.getTime() <= Date.now()) return null;
+  return decryptSecret(row.accessToken);
+}
+
+/**
+ * Reverses saveConnectorConnection. The credentials row is deleted rather than
+ * blanked, so "disconnected" means the token is genuinely gone from our side
+ * and not merely hidden. Returns the token first so the caller can revoke it
+ * with the provider before it disappears.
+ */
+export async function clearConnectorConnection(workspaceId: number, provider: string): Promise<{ revocableToken: string | null }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available. Configure DATABASE_URL before using this operation.");
+
+  const rows = await db
+    .select()
+    .from(connectorCredentials)
+    .where(and(eq(connectorCredentials.workspaceId, workspaceId), eq(connectorCredentials.provider, provider)))
+    .limit(1);
+  const revocableToken = rows[0] ? decryptSecret(rows[0].accessToken) : null;
+
+  await db.transaction(async (tx) => {
+    await tx.delete(connectorCredentials).where(and(eq(connectorCredentials.workspaceId, workspaceId), eq(connectorCredentials.provider, provider)));
+    await tx
+      .update(connectors)
+      .set({ status: "disconnected", metadata: { disconnectedAt: new Date().toISOString() }, connectedAt: null, scopes: [] })
+      .where(and(eq(connectors.workspaceId, workspaceId), eq(connectors.provider, provider)));
+  });
+
+  return { revocableToken };
 }
 
 export async function recordConnectorAttempt(input: { workspaceId: number; userId: number; provider: string; outcome: "authorization_required" | "error"; message: string }) {
