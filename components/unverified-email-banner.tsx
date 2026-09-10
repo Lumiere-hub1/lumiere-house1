@@ -57,7 +57,10 @@ export function UnverifiedEmailBanner() {
           <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "700" }}>Confirm your email address</Text>
           <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18 }}>
             {me.data.email ? `We sent a link to ${me.data.email}. ` : ""}
-            Content generation and platform connections stay locked until it is confirmed.
+            {/* Says only what the server actually enforces. Connecting a
+                platform is not gated — see verifiedWorkspaceProcedure. */}
+            Content generation stays locked until it is confirmed. You can still
+            finish setup and connect your accounts.
           </Text>
         </View>
       </View>

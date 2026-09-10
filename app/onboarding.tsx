@@ -24,6 +24,7 @@ export default function OnboardingScreen() {
   const [outcome, setOutcome] = useState<(typeof outcomes)[number]["value"]>("customers");
   const [target, setTarget] = useState("30");
   const [error, setError] = useState("");
+  const utils = trpc.useUtils();
   const createWorkspace = trpc.workspaces.create.useMutation();
   const updateBusiness = trpc.workspaces.updateBusiness.useMutation();
   const createGoal = trpc.goals.create.useMutation();
@@ -42,14 +43,30 @@ export default function OnboardingScreen() {
       const workspace = await createWorkspace.mutateAsync({ name: businessName.trim(), industry: industry.trim(), location: location.trim() || undefined });
       await updateBusiness.mutateAsync({ workspaceId: workspace.id, name: businessName.trim(), industry: industry.trim(), location: location.trim() || undefined, productsServices: products.trim(), targetCustomer: audience.trim() });
       await createGoal.mutateAsync({ workspaceId: workspace.id, title: `${outcomes.find((item) => item.value === outcome)?.label || "Growth"} in the next 30 days`, goalType: outcome, period: "Next 30 days", target: Number(target) });
+      // Drop the cached workspace list before navigating. "/" chooses between
+      // the app and this screen from that cache, which was filled with an empty
+      // list on the way in and stays fresh for 30s — so it would send the user
+      // straight back here, remounted at step 1 with everything they typed
+      // gone, despite the workspace having been created. Reset rather than
+      // invalidate: invalidate leaves the stale empty list readable, and "/"
+      // does not wait for a background refetch before deciding.
+      await utils.workspaces.list.reset();
       router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "We could not create your workspace. Nothing was marked complete.");
     }
   };
 
-  return <ScreenShell title="Set up your house" eyebrow={`Step ${step} of 4`} subtitle="Start with the essentials. You can refine your business memory later." scroll={false}>
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+  // Scrolls, unlike the other auth screens. Step 4 lists seven outcomes plus a
+  // target field, and with the unconfirmed-email banner above it the content
+  // runs past 1000px — taller than a phone viewport. Held in a plain View it
+  // was clipped with no scrollbar, so "Create workspace" and "Back" were
+  // simply unreachable and setup could not be completed at all.
+  return <ScreenShell title="Set up your house" eyebrow={`Step ${step} of 4`} subtitle="Start with the essentials. You can refine your business memory later.">
+    {/* No flex:1 here: inside ScreenShell's ScrollView that resolves to
+        flex-basis 0 and collapses the form to nothing. Height comes from the
+        content instead, and the ScrollView provides the overflow. */}
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={{ gap: 16, paddingTop: 22 }}>
         {error ? <Notice tone="error">{error}</Notice> : null}
         {step === 1 ? <><Field label="Business name" value={businessName} onChangeText={setBusinessName} placeholder="Lumière Studio" autoCapitalize="words" /><Field label="Industry" value={industry} onChangeText={setIndustry} placeholder="Wellness, retail, services…" /><Field label="Location" value={location} onChangeText={setLocation} placeholder="City or region" /></> : null}
