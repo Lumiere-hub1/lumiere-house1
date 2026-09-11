@@ -59,6 +59,27 @@ export const ENV = {
   },
 } as const;
 
+/**
+ * Reports a configured value in a form an invisible character cannot hide in.
+ *
+ * trim() removes ordinary whitespace, but not a zero-width space (U+200B) or a
+ * BOM (U+FEFF). One of those pasted into an env var survives, gets
+ * percent-encoded into the TikTok authorize URL, and is rejected with an error
+ * naming client_key — while looking identical to the correct value everywhere
+ * a human would check, raw JSON included. The length and the escaped form turn
+ * that from a guessing game into something you can see.
+ *
+ * Escapes everything outside printable ASCII, space included, so a stray space
+ * in the middle of a value shows up as   rather than as nothing.
+ */
+function describeConfiguredValue(value: string) {
+  return {
+    value,
+    length: value.length,
+    escaped: value.replace(/[^\x21-\x7E]/g, (char) => `\\u${(char.codePointAt(0) ?? 0).toString(16).padStart(4, "0")}`),
+  };
+}
+
 export function getRuntimeDiagnostics() {
   let tiktokRedirectValid = false;
   try {
@@ -89,6 +110,21 @@ export function getRuntimeDiagnostics() {
     scriptProvider: ENV.bedrock.apiKey ? (ENV.bedrock.region ? "bedrock" : "bedrock-missing-region") : ENV.anthropicApiKey ? "anthropic" : "none",
     youtubeConfigured: Boolean(ENV.youtubeApiKey),
     tiktokConfigured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid),
-    tiktok: { configured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid), redirectValid: tiktokRedirectValid, missing: tiktokMissing },
+    tiktok: {
+      configured: Boolean(ENV.tiktok.clientKey && ENV.tiktok.clientSecret && ENV.tiktok.redirectUri && tiktokRedirectValid),
+      redirectValid: tiktokRedirectValid,
+      missing: tiktokMissing,
+      // Reported so the deployed values can be compared against the TikTok
+      // developer dashboard without guessing. All three are public by design:
+      // every authorize URL the browser is sent to carries them in plain sight.
+      //
+      // TIKTOK_CLIENT_SECRET is deliberately absent and must stay absent — this
+      // endpoint is unauthenticated. tests/diagnostics-tiktok.test.ts fails if
+      // it ever appears here.
+      clientKey: describeConfiguredValue(ENV.tiktok.clientKey),
+      redirectUri: describeConfiguredValue(ENV.tiktok.redirectUri),
+      // The value actually sent, fallback resolved, rather than the raw env var.
+      scope: describeConfiguredValue(ENV.tiktok.scopes || "user.info.basic"),
+    },
   };
 }
