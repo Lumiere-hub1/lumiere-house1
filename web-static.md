@@ -27,3 +27,22 @@ Two things to be careful about:
 
 Anything that is part of the app itself belongs in `assets/` or in a route
 under `app/`, not here.
+
+## Deploy from git, not from a local checkout
+
+`vercel --prod` uploads the files in the folder it is run from, not what is on
+`main`. Run from a checkout that is behind, and it publishes that older tree
+over production — silently, and with no warning that anything regressed.
+
+This has happened twice, both times from the same stale checkout sitting four
+days behind. Each time it removed `web-static/` from the deployed output, so
+`tiktok<hash>.txt` started returning the app's HTML instead of its 68 bytes of
+plain text, and the domain quietly stopped verifying. The root-level `/privacy`
+and `/terms` routes went with it — the URLs registered with TikTok resolving to
+nothing.
+
+Deploy by pushing to `main` and letting the git integration build. If you do
+deploy from a local checkout, `git status` and `git log --oneline -1` first,
+and confirm the commit matches `origin/main`. A deployment whose Vercel
+metadata shows `gitDirty: 1` was built from uncommitted local files and should
+be treated as suspect.
